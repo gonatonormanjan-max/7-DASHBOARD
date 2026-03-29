@@ -1,23 +1,10 @@
-import NextAuth, { getServerSession } from "next-auth";
+import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import type { AuthOptions, Session } from "next-auth";
-import type { NextRequest } from "next/server";
 
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      name?: string | null;
-      email?: string | null;
-      image?: string | null;
-    };
-  }
-}
-
-export const authOptions: AuthOptions = {
+export const { auth, handlers, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: {
@@ -74,26 +61,4 @@ export const authOptions: AuthOptions = {
       return session;
     },
   },
-};
-
-// auth() — server-side session helper (NextAuth v4 equivalent of v5 auth())
-export async function auth(): Promise<Session | null> {
-  return getServerSession(authOptions);
-}
-
-// handlers — App Router GET/POST handlers
-const handler = NextAuth(authOptions);
-
-interface RouteHandlerContext {
-  params: Promise<{ nextauth: string[] }>;
-}
-
-export const handlers = {
-  GET: (req: NextRequest, context: RouteHandlerContext) =>
-    handler(req, context as any),
-  POST: (req: NextRequest, context: RouteHandlerContext) =>
-    handler(req, context as any),
-};
-
-// signIn / signOut — re-exported for convenience (client-side usage via next-auth/react)
-export { signIn, signOut } from "next-auth/react";
+});
