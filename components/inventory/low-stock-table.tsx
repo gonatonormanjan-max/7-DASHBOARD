@@ -5,7 +5,7 @@ type LowStockRow = {
   id: string;
   quantity: number;
   reservedQty: number;
-  warehouse: {
+  location: {
     id: string;
     name: string;
     code: string;
@@ -69,9 +69,9 @@ export function LowStockTable({ lowStockRows }: LowStockTableProps) {
                     <p className="mt-1 text-sm text-slate-500">{row.product.sku}</p>
                   </td>
                   <td className="px-5 py-4 text-sm text-slate-600">
-                    {row.warehouse.name}
+                    {row.location.name}
                     <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                      {row.warehouse.code}
+                      {row.location.code}
                     </p>
                   </td>
                   <td className="px-5 py-4 text-sm font-medium text-[#8a5610]">
