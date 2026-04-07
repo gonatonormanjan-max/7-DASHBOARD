@@ -337,7 +337,7 @@ async function getRevenueByBranchOverTime() {
     },
   });
 
-  const warehouseNames = new Map<string, string>();
+  const locationNames = new Map<string, string>();
   const byDateAndBranch = new Map<string, Map<string, number>>();
 
   for (const item of items) {
@@ -345,7 +345,7 @@ async function getRevenueByBranchOverTime() {
     const branchId = item.location.id;
     const revenue = item.quantity * item.unitPrice.toNumber();
 
-    warehouseNames.set(branchId, item.location.name);
+    locationNames.set(branchId, item.location.name);
 
     if (!byDateAndBranch.has(date)) {
       byDateAndBranch.set(date, new Map());
@@ -355,7 +355,7 @@ async function getRevenueByBranchOverTime() {
     dateMap.set(branchId, (dateMap.get(branchId) ?? 0) + revenue);
   }
 
-  const branches = Array.from(warehouseNames, ([id, name]) => ({ id, name }));
+  const branches = Array.from(locationNames, ([id, name]) => ({ id, name }));
   const dateRange = buildDateRange(since);
 
   const data = dateRange.map((date) => {
@@ -476,14 +476,14 @@ async function getSeasonalTrends() {
   });
 
   const byMonth = new Map<string, Map<string, { revenue: number; orders: Set<string> }>>();
-  const warehouseNames = new Map<string, string>();
+  const locationNames = new Map<string, string>();
 
   for (const item of items) {
     const month = item.salesOrder.createdAt.toISOString().slice(0, 7); // YYYY-MM
     const branchId = item.location.id;
     const revenue = item.quantity * item.unitPrice.toNumber();
 
-    warehouseNames.set(branchId, item.location.name);
+    locationNames.set(branchId, item.location.name);
 
     if (!byMonth.has(month)) {
       byMonth.set(month, new Map());
@@ -499,7 +499,7 @@ async function getSeasonalTrends() {
     entry.revenue += revenue;
   }
 
-  const branches = Array.from(warehouseNames, ([id, name]) => ({ id, name }));
+  const branches = Array.from(locationNames, ([id, name]) => ({ id, name }));
   const months = Array.from(byMonth.keys()).sort();
 
   const data = months.map((month) => {
