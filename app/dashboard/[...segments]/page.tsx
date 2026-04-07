@@ -25,7 +25,7 @@ const moduleConfig: Record<
     title: "Warehouses",
     description:
       "Warehouse-level stock visibility, location details, and transfer workflows will be built into this module.",
-    resource: "warehouses",
+    resource: "locations",
   },
   "purchase-orders": {
     title: "Purchase Orders",

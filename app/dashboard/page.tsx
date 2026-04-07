@@ -37,7 +37,7 @@ const capabilityCards: Array<{
   },
   {
     title: "Warehouse Operations",
-    resource: "warehouses",
+    resource: "locations",
     primaryAction: "read",
     detail: "Review stock by warehouse, transfer readiness, and threshold-driven replenishment points.",
   },

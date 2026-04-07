@@ -18,7 +18,7 @@ type ProductRow = {
   costPrice: { toString(): string };
   status: ProductStatus;
   updatedAt: Date;
-  warehouseStock: {
+  locationStock: {
     quantity: number;
   }[];
   category: {
@@ -153,8 +153,8 @@ export function ProductsTable({
               const archiveAction = archiveProductAction.bind(null, product.id, returnTo);
               const deactivateAction = deactivateProductAction.bind(null, product.id, returnTo);
               const restoreAction = restoreProductAction.bind(null, product.id, returnTo);
-              const totalStock = product.warehouseStock.reduce(
-                (sum, warehouse) => sum + warehouse.quantity,
+              const totalStock = product.locationStock.reduce(
+                (sum, location) => sum + location.quantity,
                 0
               );
 
