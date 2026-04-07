@@ -7,7 +7,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 const statItems: Array<keyof Awaited<ReturnType<typeof getMockDataSummary>>> = [
   "categories",
   "suppliers",
-  "warehouses",
+  "locations",
   "products",
   "stockRows",
   "movements",
@@ -16,7 +16,7 @@ const statItems: Array<keyof Awaited<ReturnType<typeof getMockDataSummary>>> = [
 const labels: Record<(typeof statItems)[number], string> = {
   categories: "Categories",
   suppliers: "Suppliers",
-  warehouses: "Warehouses",
+  locations: "Locations",
   products: "Products",
   stockRows: "Stock Rows",
   movements: "Movements",
