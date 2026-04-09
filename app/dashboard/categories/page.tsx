@@ -6,6 +6,7 @@ import { parseCategoryListFilters } from "@/lib/validators/categories";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
+import { TabToggle } from "@/components/ui/tab-toggle";
 import { CategoriesFilters } from "@/components/categories/categories-filters";
 import { CategoriesTable } from "@/components/categories/categories-table";
 
@@ -36,6 +37,21 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
         }
       />
 
+      <TabToggle
+        tabs={[
+          {
+            label: "Categories",
+            href: "/dashboard/categories",
+            active: true,
+          },
+          {
+            label: "Brands",
+            href: "/dashboard/categories/brands",
+            active: false,
+          },
+        ]}
+      />
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           description="Total category records in the catalog."
@@ -56,19 +72,21 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
           value={String(summary.empty)}
         />
         <StatCard
-          description="Products currently grouped by the filtered category set."
-          label="Linked Products"
-          value={String(summary.linkedProducts)}
+          description="Products currently grouped by these categories."
+          label="Products"
+          value={String(summary.totalProducts)}
         />
       </section>
 
-      <CategoriesFilters filters={filters} />
+      <CategoriesFilters
+        canManage={canManage}
+        filters={filters}
+      />
 
       <CategoriesTable
         canDelete={canDelete}
         canManage={canManage}
         categories={categories}
-        returnTo="/dashboard/categories"
       />
     </div>
   );

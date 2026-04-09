@@ -22,6 +22,8 @@ type InventoryTransferFormProps = {
     name: string;
     code: string;
   }>;
+  initialFromLocationId?: string;
+  returnTo?: string;
 };
 
 function fieldValue(state: InventoryTransferState, key: string, fallback = "") {
@@ -32,6 +34,8 @@ export function InventoryTransferForm({
   action,
   products,
   locations,
+  initialFromLocationId,
+  returnTo,
 }: InventoryTransferFormProps) {
   const [state, formAction] = useActionState(action, initialInventoryTransferState);
   const isReady = products.length > 0 && locations.length > 1;
@@ -41,6 +45,8 @@ export function InventoryTransferForm({
       action={formAction}
       className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]"
     >
+      {returnTo ? <input name="returnTo" type="hidden" value={returnTo} /> : null}
+
       <div>
         <h2 className="text-lg font-semibold text-slate-950">Stock transfer</h2>
         <p className="mt-1 text-sm leading-6 text-slate-500">
@@ -86,7 +92,11 @@ export function InventoryTransferForm({
             <span className="text-sm font-medium text-slate-700">From location</span>
             <select
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
-              defaultValue={fieldValue(state, "fromLocationId")}
+              defaultValue={fieldValue(
+                state,
+                "fromLocationId",
+                initialFromLocationId ?? ""
+              )}
               disabled={!isReady}
               name="fromLocationId"
             >
@@ -154,10 +164,8 @@ export function InventoryTransferForm({
         </label>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <SubmitButton disabled={!isReady} pendingLabel="Transferring...">
-          Record transfer
-        </SubmitButton>
+      <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+        <SubmitButton disabled={!isReady}>Transfer stock</SubmitButton>
       </div>
     </form>
   );

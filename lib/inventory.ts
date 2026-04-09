@@ -13,6 +13,7 @@ export const INVENTORY_MOVEMENT_TYPES = [
   MovementType.TRANSFER_IN,
   MovementType.CUSTOMER_RETURN,
   MovementType.DAMAGED_LOST,
+  MovementType.INITIAL_STOCK,
 ] as const;
 
 export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
@@ -23,6 +24,7 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   TRANSFER_IN: "Transfer in",
   CUSTOMER_RETURN: "Customer return",
   DAMAGED_LOST: "Damaged or lost",
+  INITIAL_STOCK: "Opening stock",
 };
 
 export function getMovementTypeLabel(type: MovementType) {

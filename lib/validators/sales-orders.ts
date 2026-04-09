@@ -1,37 +1,77 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "@/lib/pagination";
 
 export const WALK_IN_CUSTOMER_NAME = "Walk-in Customer";
 
-const salesOrderCustomerSchema = z.object({
-  customerName: z.string().trim().min(1, "Customer name is required.").max(120),
+function firstString(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function parseItemsPayload(itemsPayload: string): unknown {
+  if (!itemsPayload.trim()) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(itemsPayload);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDateFilter(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+}
+
+const salesOrderItemSchema = z.object({
+  productId: z.string().uuid("Select a valid product."),
+  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1."),
+  unitPrice: z.coerce.number().min(0, "Unit price cannot be negative."),
+});
+
+const optionalDateSchema = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => normalizeDateFilter(value));
+
+export const salesOrderFormSchema = z.object({
+  locationId: z.string().uuid("Select a valid branch."),
+  customerName: z.string().trim().min(1, "Customer name is required.").max(150),
   customerEmail: z
     .string()
     .trim()
-    .max(160, "Email must be 160 characters or fewer.")
+    .email("Enter a valid email address.")
     .optional()
-    .transform((value) => value || null)
-    .refine((value) => value === null || z.email().safeParse(value).success, {
-      message: "Enter a valid email address.",
-    }),
+    .or(z.literal("")),
   notes: z
     .string()
     .trim()
     .max(500, "Notes must be 500 characters or fewer.")
     .optional()
     .transform((value) => value || null),
-  itemsPayload: z.string().trim().min(1, "Add at least one sale item."),
+  items: z.array(salesOrderItemSchema).min(1, "Add at least one item"),
 });
 
-const salesOrderLineItemSchema = z.object({
-  productId: z.string().uuid("Select a valid product."),
-  locationId: z.string().uuid("Select a valid location."),
-  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1."),
-  unitPrice: z.coerce.number().min(0, "Unit price cannot be negative."),
-  priceOverridden: z.boolean().optional().default(false),
-  locationOverridden: z.boolean().optional().default(false),
-});
+export const salesOrderListQuerySchema = z
+  .object({
+    query: z.string().trim().max(150).optional().default(""),
+    status: z
+      .enum(["all", "DRAFT", "CONFIRMED", "DELIVERED", "COMPLETED", "CANCELLED"])
+      .optional()
+      .catch("all")
+      .default("all"),
+    dateFrom: optionalDateSchema,
+    dateTo: optionalDateSchema,
+  })
+  .merge(paginationQuerySchema);
 
-export type ParsedSalesOrderLineItem = z.infer<typeof salesOrderLineItemSchema>;
+export type SalesOrderFormData = z.output<typeof salesOrderFormSchema>;
+export type SalesOrderListFilters = z.output<typeof salesOrderListQuerySchema>;
 
 export type SalesOrderFormState = {
   status: "idle" | "error";
@@ -41,123 +81,60 @@ export type SalesOrderFormState = {
   values?: Record<string, string>;
 };
 
+export type ExtractedSalesOrderFormValues = {
+  locationId: string;
+  customerName: string;
+  customerEmail: string;
+  notes: string;
+  itemsPayload: string;
+  items: unknown;
+  customerMode: string;
+  defaultLocationId: string;
+};
+
 export const initialSalesOrderFormState: SalesOrderFormState = {
   status: "idle",
 };
 
-export function extractSalesOrderFormValues(formData: FormData) {
+export function parseSalesOrderListFilters(
+  searchParams: Record<string, string | string[] | undefined>
+) {
+  const parsed = salesOrderListQuerySchema.parse({
+    query: firstString(searchParams.query),
+    status: firstString(searchParams.status),
+    dateFrom: firstString(searchParams.dateFrom),
+    dateTo: firstString(searchParams.dateTo),
+    page: firstString(searchParams.page),
+    pageSize: firstString(searchParams.pageSize),
+  });
+
+  if (parsed.dateFrom && parsed.dateTo && parsed.dateFrom > parsed.dateTo) {
+    return {
+      ...parsed,
+      dateFrom: parsed.dateTo,
+      dateTo: parsed.dateFrom,
+    };
+  }
+
+  return parsed;
+}
+
+export function extractSalesOrderFormValues(
+  formData: FormData
+): ExtractedSalesOrderFormValues {
+  const itemsPayload = String(formData.get("itemsPayload") ?? "");
+  const locationId = String(
+    formData.get("locationId") ?? formData.get("defaultLocationId") ?? ""
+  );
+
   return {
+    locationId,
     customerName: String(formData.get("customerName") ?? ""),
     customerEmail: String(formData.get("customerEmail") ?? ""),
     notes: String(formData.get("notes") ?? ""),
-    itemsPayload: String(formData.get("itemsPayload") ?? ""),
+    itemsPayload,
+    items: parseItemsPayload(itemsPayload),
     customerMode: String(formData.get("customerMode") ?? ""),
-    defaultLocationId: String(formData.get("defaultLocationId") ?? ""),
+    defaultLocationId: locationId,
   };
-}
-
-export function parseSalesOrderCustomer(values: Record<string, string>) {
-  return salesOrderCustomerSchema.safeParse(values);
-}
-
-export function parseSalesOrderItems(itemsPayload: string) {
-  let parsedJson: unknown;
-
-  try {
-    parsedJson = JSON.parse(itemsPayload);
-  } catch {
-    return {
-      success: false as const,
-      itemErrors: undefined,
-      error: {
-        flatten: () => ({
-          fieldErrors: {
-            itemsPayload: ["We could not read the sale items. Please try again."],
-          },
-        }),
-      },
-    };
-  }
-
-  if (!Array.isArray(parsedJson)) {
-    return {
-      success: false as const,
-      itemErrors: undefined,
-      error: {
-        flatten: () => ({
-          fieldErrors: {
-            itemsPayload: ["We could not read the sale items. Please try again."],
-          },
-        }),
-      },
-    };
-  }
-
-  if (parsedJson.length === 0) {
-    return {
-      success: false as const,
-      itemErrors: undefined,
-      error: {
-        flatten: () => ({
-          fieldErrors: {
-            itemsPayload: ["Add at least one item to the sale."],
-          },
-        }),
-      },
-    };
-  }
-
-  const itemErrors: Array<string | undefined> = new Array(parsedJson.length).fill(undefined);
-  const parsedItems: ParsedSalesOrderLineItem[] = [];
-
-  for (const [index, rawItem] of parsedJson.entries()) {
-    const result = salesOrderLineItemSchema.safeParse(rawItem);
-
-    if (!result.success) {
-      itemErrors[index] = result.error.issues[0]?.message ?? "Fix this sale line.";
-      continue;
-    }
-
-    parsedItems.push(result.data);
-  }
-
-  if (itemErrors.some(Boolean)) {
-    return {
-      success: false as const,
-      itemErrors,
-      error: {
-        flatten: () => ({
-          fieldErrors: {
-            itemsPayload: ["Fix the highlighted sale lines before recording."],
-          },
-        }),
-      },
-    };
-  }
-
-  return {
-    success: true as const,
-    data: parsedItems,
-  };
-}
-
-export function normalizeSalesOrderItems(items: ParsedSalesOrderLineItem[]) {
-  const merged = new Map<string, ParsedSalesOrderLineItem>();
-
-  for (const item of items) {
-    const key = `${item.productId}:${item.locationId}:${item.unitPrice.toFixed(2)}`;
-    const existing = merged.get(key);
-
-    if (existing) {
-      existing.quantity += item.quantity;
-      existing.priceOverridden = existing.priceOverridden || item.priceOverridden;
-      existing.locationOverridden =
-        existing.locationOverridden || item.locationOverridden;
-      continue;
-    }
-
-    merged.set(key, { ...item });
-  }
-
-  return [...merged.values()];
 }

@@ -2,137 +2,213 @@ import Form from "next/form";
 import Link from "next/link";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermission } from "@/lib/dal/auth";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { getSalesOrderListData } from "@/lib/dal/sales-orders";
+import { parseSalesOrderListFilters } from "@/lib/validators/sales-orders";
 import { formatCurrency } from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { SalesOrdersTable } from "@/components/sales-orders/sales-orders-table";
-import { BulkArchiveButton } from "@/components/sales-orders/archive-actions";
+import { Pagination } from "@/components/ui/pagination";
+import { StatCard } from "@/components/ui/stat-card";
+import { SalesOrderStatusBadge } from "@/components/sales-orders/sales-order-status-badge";
 
 type SalesOrdersPageProps = {
-  searchParams: Promise<{
-    query?: string | string[];
-    window?: string | string[];
-  }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
-
-function readParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 export default async function SalesOrdersPage({
   searchParams,
 }: SalesOrdersPageProps) {
   const user = await requirePermission("sales_orders", "read");
-  const resolvedSearchParams = await searchParams;
-  const query = readParam(resolvedSearchParams.query) ?? "";
-  const windowFilter = readParam(resolvedSearchParams.window) ?? "all";
-  const { orders, summary, filteredCount } = await getSalesOrderListData({
-    query,
-    window:
-      windowFilter === "today" || windowFilter === "7d" || windowFilter === "30d"
-        ? windowFilter
-        : "all",
-  });
+  const filters = parseSalesOrderListFilters(await searchParams);
+  const { orders, pagination, summary } = await getSalesOrderListData(filters);
   const canCreate = hasPermission(user.role, "sales_orders", "create");
-  const hasFilters = query.trim().length > 0 || windowFilter !== "all";
+  const hasFilters = Boolean(
+    filters.query || filters.status !== "all" || filters.dateFrom || filters.dateTo
+  );
 
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="Daily Transactions"
+        eyebrow="Sales"
         title="Sales Orders"
-        description="Record customer purchases here so completed sales immediately reduce warehouse inventory and create a permanent movement trail."
+        description="Track branch sales from draft through delivery and completion while keeping stock movements tied to the right status change."
         action={
           canCreate ? (
             <Link href="/dashboard/sales-orders/new">
-              <Button>Record sale</Button>
+              <Button>New Sale</Button>
             </Link>
           ) : null
         }
       />
 
-      <section className="rounded-[24px] border border-white/70 bg-white/85 p-5 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
-        <div className="grid grid-cols-2 gap-3 lg:flex lg:items-center lg:gap-0">
-          <div className="lg:border-r lg:border-slate-200 lg:pr-5 lg:mr-5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">All sales</p>
-            <p className="mt-0.5 text-sm font-semibold text-slate-900">{String(summary.total)}</p>
-          </div>
-          <div className="lg:border-r lg:border-slate-200 lg:pr-5 lg:mr-5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Today</p>
-            <p className="mt-0.5 text-sm font-semibold text-slate-900">{String(summary.today)}</p>
-          </div>
-          <div className="lg:border-r lg:border-slate-200 lg:pr-5 lg:mr-5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Revenue</p>
-            <p className="mt-0.5 text-sm font-semibold text-slate-900">{formatCurrency(summary.revenue.toString())}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Recent</p>
-            <p className="mt-0.5 text-sm font-semibold text-slate-900">{String(summary.recent)}</p>
-          </div>
-        </div>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          description="Orders in the current search and date window."
+          label="Total"
+          tone="primary"
+          value={String(summary.total)}
+        />
+        <StatCard
+          description="Draft orders still being prepared."
+          label="Draft"
+          value={String(summary.draft)}
+        />
+        <StatCard
+          description="Confirmed orders waiting for branch fulfillment."
+          label="Confirmed"
+          tone="warning"
+          value={String(summary.confirmed)}
+        />
+        <StatCard
+          description="Delivered orders that have already reduced stock."
+          label="Delivered"
+          tone="success"
+          value={String(summary.delivered)}
+        />
+      </section>
 
-        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <section className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950">Find recent sales faster</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Find orders quickly</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Search by order number, customer, or SKU, or narrow to a recent time window.
+              Search by order number or customer, filter by workflow status, and narrow
+              to a date range.
             </p>
           </div>
-          <div className="text-sm text-slate-500">
-            Showing {orders.length} of {filteredCount} result{filteredCount === 1 ? "" : "s"}
-            {hasFilters ? " with filters applied." : "."}
-          </div>
+          <p className="text-sm text-slate-500">
+            Showing {pagination.from}-{pagination.to} of {pagination.totalCount} orders
+          </p>
         </div>
 
         <Form
           action="/dashboard/sales-orders"
-          className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]"
+          className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_220px_repeat(2,190px)_auto]"
         >
-          <input
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
-            defaultValue={query}
-            name="query"
-            placeholder="Search order, customer, or SKU"
-            type="search"
-          />
-          <select
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
-            defaultValue={windowFilter}
-            name="window"
-          >
-            <option value="all">All time</option>
-            <option value="today">Today</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-          </select>
-          <div className="flex gap-2">
-            <Button className="flex-1" type="submit" variant="outline">
-              Apply filters
+          <input name="page" type="hidden" value="1" />
+          <input name="pageSize" type="hidden" value={String(filters.pageSize)} />
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Search</span>
+            <input
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              defaultValue={filters.query}
+              name="query"
+              placeholder="Search order number or customer"
+              type="search"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Status</span>
+            <select
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              defaultValue={filters.status}
+              name="status"
+            >
+              <option value="all">All statuses</option>
+              <option value="DRAFT">Draft</option>
+              <option value="CONFIRMED">Confirmed</option>
+              <option value="DELIVERED">Delivered</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Date from</span>
+            <input
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              defaultValue={filters.dateFrom ?? ""}
+              name="dateFrom"
+              type="date"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Date to</span>
+            <input
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              defaultValue={filters.dateTo ?? ""}
+              name="dateTo"
+              type="date"
+            />
+          </label>
+
+          <div className="flex items-end gap-2">
+            <Button className="flex-1" type="submit">
+              Filter
             </Button>
             {hasFilters ? (
-              <Link className="flex-1" href="/dashboard/sales-orders">
-                <Button className="w-full" type="button" variant="ghost">
-                  Reset
+              <Link href="/dashboard/sales-orders">
+                <Button type="button" variant="outline">
+                  Clear
                 </Button>
               </Link>
             ) : null}
           </div>
         </Form>
+
+        <div className="mt-6 overflow-hidden rounded-[20px] border border-slate-200">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50/70">
+              <tr className="text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                <th className="px-4 py-3">Order #</th>
+                <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Items</th>
+                <th className="px-4 py-3">Total</th>
+                <th className="px-4 py-3">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 bg-white">
+              {orders.length === 0 ? (
+                <tr>
+                  <td
+                    className="px-4 py-8 text-center text-sm text-slate-500"
+                    colSpan={6}
+                  >
+                    No orders found.
+                  </td>
+                </tr>
+              ) : (
+                orders.map((order) => (
+                  <tr key={order.id} className="hover:bg-slate-50/60">
+                    <td className="px-4 py-3">
+                      <Link
+                        className="text-sm font-semibold text-primary hover:underline"
+                        href={`/dashboard/sales-orders/${order.id}`}
+                      >
+                        {order.orderNumber}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {order.customerName}
+                    </td>
+                    <td className="px-4 py-3">
+                      <SalesOrderStatusBadge status={order.status} />
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      {order._count.items}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-semibold text-slate-900">
+                      {formatCurrency(order.totalAmount.toString())}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-500">
+                      {order.createdAt.toLocaleDateString("en-PH", {
+                        dateStyle: "medium",
+                      })}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
-      <SalesOrdersTable orders={orders} canCreate={canCreate} hasFilters={hasFilters} />
-
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white/85 px-5 py-4">
-        <div className="flex items-center gap-4">
-          <BulkArchiveButton />
-          <Link href="/dashboard/sales-orders/archive">
-            <Button variant="ghost" className="text-xs text-slate-500 underline">
-              View archived orders
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <Pagination basePath="/dashboard/sales-orders" pagination={pagination} query={filters} />
     </div>
   );
 }

@@ -77,20 +77,31 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
         action={boundUpdateAction}
         canCreateCategory={hasPermission(user.role, "categories", "create")}
         categories={options.categories}
+        existingSuppliers={product.suppliers.map((productSupplier) => ({
+          supplierId: productSupplier.supplier.id,
+          isPrimary: productSupplier.isPrimary,
+          costPrice: productSupplier.costPrice.toString(),
+          leadTimeDays:
+            productSupplier.leadTimeDays === null
+              ? ""
+              : productSupplier.leadTimeDays.toString(),
+          notes: productSupplier.notes ?? "",
+        }))}
         mode="edit"
         product={{
           id: product.id,
           name: product.name,
           sku: product.sku,
-          categoryId: product.categoryId,
-          supplierId: product.supplierId,
+          description: product.description ?? "",
           unitPrice: product.unitPrice.toString(),
           costPrice: product.costPrice.toString(),
-          reorderLevel: product.reorderLevel,
-          imageUrl: product.imageUrl,
-          description: product.description,
-          status: product.status,
+          reorderLevel: String(product.reorderLevel),
+          imageUrl: product.imageUrl ?? "",
+          status: product.status as "ACTIVE" | "INACTIVE",
+          categoryId: product.categoryId,
+          brandId: product.brandId ?? "",
         }}
+        brands={options.brands}
         suppliers={options.suppliers}
       />
     </div>

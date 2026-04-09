@@ -25,7 +25,7 @@ type ProductRow = {
     id: string;
     name: string;
   };
-  supplier: {
+  brand: {
     id: string;
     name: string;
   } | null;
@@ -171,7 +171,7 @@ export function ProductsTable({
                   <td className="px-5 py-4 text-sm text-slate-500">{product.sku}</td>
                   <td className="px-5 py-4 text-sm text-slate-600">{product.category.name}</td>
                   <td className="px-5 py-4 text-sm text-slate-600">
-                    {product.supplier?.name ?? "Unassigned"}
+                    {product.brand?.name ?? "Unbranded"}
                   </td>
                   <td className="px-5 py-4 text-sm text-slate-600">
                     {formatCurrency(product.unitPrice.toString())}

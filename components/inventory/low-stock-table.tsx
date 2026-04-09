@@ -15,7 +15,7 @@ type LowStockRow = {
     name: string;
     sku: string;
     reorderLevel: number;
-    supplier: {
+    brand: {
       id: string;
       name: string;
     } | null;
@@ -84,7 +84,7 @@ export function LowStockTable({ lowStockRows }: LowStockTableProps) {
                     {shortage.toLocaleString("en-US")}
                   </td>
                   <td className="px-5 py-4 text-sm text-slate-600">
-                    {row.product.supplier?.name ?? "Unassigned"}
+                    {row.product.brand?.name ?? "Unbranded"}
                   </td>
                 </tr>
               );

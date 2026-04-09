@@ -1,127 +1,186 @@
+import Link from "next/link";
+import { ArrowRight, Building2, Database, Globe2, Store, Truck } from "lucide-react";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermission } from "@/lib/dal/auth";
-import { adjustInventoryAction, transferInventoryAction } from "@/lib/actions/inventory";
-import { getInventoryPageData } from "@/lib/dal/inventory";
-import { parseInventoryFilters } from "@/lib/validators/inventory";
-import { InventoryAdjustmentForm } from "@/components/inventory/inventory-adjustment-form";
-import { InventoryFilters } from "@/components/inventory/inventory-filters";
-import { LowStockTable } from "@/components/inventory/low-stock-table";
-import { InventoryMovementTable } from "@/components/inventory/movement-table";
-import { InventoryStockTable } from "@/components/inventory/stock-table";
-import { InventoryTransferForm } from "@/components/inventory/inventory-transfer-form";
+import { getInventoryLandingData, type InventoryLocationCard } from "@/lib/dal/inventory";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 
-type InventoryPageProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
+function InventoryLocationCardLink({ location }: { location: InventoryLocationCard }) {
+  const Icon = location.type === "WAREHOUSE" ? Building2 : Store;
+  const lowStockLabel =
+    location.lowStockCount > 0
+      ? `${location.lowStockCount.toLocaleString("en-US")} low-stock alerts`
+      : "All stocked";
 
-export default async function InventoryPage({ searchParams }: InventoryPageProps) {
+  return (
+    <Link
+      className="group block rounded-[20px] border border-slate-200 bg-slate-50/70 p-5 transition hover:border-slate-300 hover:bg-white hover:shadow-sm cursor-pointer"
+      href={`/dashboard/inventory/${location.id}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600">
+              <Icon className="size-4" strokeWidth={2.1} />
+            </span>
+            <div>
+              <h3 className="font-semibold text-slate-900">{location.name}</h3>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {location.code}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <ArrowRight className="mt-1 size-4 text-slate-400 transition group-hover:text-slate-600" />
+      </div>
+
+      <p className="mt-5 text-sm text-slate-600">
+        {location.skuCount.toLocaleString("en-US")} SKUs /{" "}
+        {location.totalOnHand.toLocaleString("en-US")} units on hand
+      </p>
+      <p
+        className={`mt-3 text-sm font-semibold ${
+          location.lowStockCount > 0 ? "text-[#8a5610]" : "text-[#11664b]"
+        }`}
+      >
+        {lowStockLabel}
+      </p>
+      <p className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+        View Inventory
+        <ArrowRight className="size-4" strokeWidth={2.2} />
+      </p>
+    </Link>
+  );
+}
+
+export default async function InventoryPage() {
   const user = await requirePermission("inventory", "read");
-  const filters = parseInventoryFilters(await searchParams);
-  const { stockRows, lowStockRows, movements, options, summary } =
-    await getInventoryPageData(filters);
+  const { locationCards, globalSummary } = await getInventoryLandingData();
   const canManage = hasPermission(user.role, "inventory", "update");
+  const warehouses = locationCards.filter((location) => location.type === "WAREHOUSE");
+  const branches = locationCards.filter((location) => location.type === "BRANCH");
 
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow="Inventory Control"
         title="Inventory"
-        description="Monitor warehouse stock, review movement history, correct counts, and move available inventory between active locations."
+        description="Monitor stock by location, record movements, and manage stock health across all warehouses and branches."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          description="Unique products with available stock in the current filtered view."
-          label="SKUs in stock"
+          description="Distinct products with positive on-hand quantity across active locations."
+          label="Total SKUs in stock"
           tone="primary"
-          value={String(summary.skuCount)}
+          value={String(globalSummary.totalSkus)}
         />
         <StatCard
-          description="Rows at or below their reorder level after reserved stock is considered."
-          label="Low-stock rows"
-          tone="warning"
-          value={String(summary.lowStockCount)}
-        />
-        <StatCard
-          description="Rows with no available stock remaining in the filtered overview."
-          label="Out of stock"
-          value={String(summary.outOfStockCount)}
-        />
-        <StatCard
-          description="Total on-hand units across the visible stock rows."
-          label="On-hand units"
+          description="Units currently recorded on hand across every active warehouse and branch."
+          label="Total on-hand units"
           tone="success"
-          value={summary.onHandUnits.toLocaleString("en-US")}
+          value={globalSummary.totalOnHand.toLocaleString("en-US")}
+        />
+        <StatCard
+          description="Product-location rows at or below reorder level after reserved stock is applied."
+          label="Low-stock alerts"
+          tone="warning"
+          value={String(globalSummary.totalLowStock)}
+        />
+        <StatCard
+          description="Product-location rows with no available stock remaining."
+          label="Out of stock"
+          value={String(globalSummary.totalOutOfStock)}
         />
       </section>
 
-      <InventoryFilters
-        categories={options.categories}
-        filters={filters}
-        suppliers={options.suppliers}
-        locations={options.locations}
-      />
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">Quick Actions</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Open dedicated inventory workflows for receipts and opening balances.
+          </p>
+        </div>
 
-      <section className="grid gap-6 xl:grid-cols-[1.45fr_0.85fr]">
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-950">Stock overview</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Warehouse-level stock posture with reserved and available quantities shown side by
-              side.
-            </p>
+        {canManage ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            <Link
+              className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+              href="/dashboard/inventory/receive"
+            >
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5ff] text-[#16324b]">
+                  <Truck className="size-5" strokeWidth={2.1} />
+                </span>
+                <div>
+                  <h3 className="font-semibold text-slate-950">Receive from Supplier</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Record a new delivery from a supplier and update location stock immediately.
+                  </p>
+                </div>
+              </div>
+            </Link>
+
+            <Link
+              className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+              href="/dashboard/inventory/initial-stock"
+            >
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edfff5] text-[#0a4429]">
+                  <Database className="size-5" strokeWidth={2.1} />
+                </span>
+                <div>
+                  <h3 className="font-semibold text-slate-950">Set Opening Balance</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Record the initial stock quantity for a product at a location.
+                  </p>
+                </div>
+              </div>
+            </Link>
           </div>
-          <InventoryStockTable stockRows={stockRows} />
-        </div>
-
-        <div className="space-y-6">
-          {canManage ? (
-            <>
-              <InventoryAdjustmentForm
-                action={adjustInventoryAction}
-                products={options.products}
-                locations={options.locations}
-              />
-              <InventoryTransferForm
-                action={transferInventoryAction}
-                products={options.products}
-                locations={options.locations}
-              />
-            </>
-          ) : (
-            <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
-              <h2 className="text-lg font-semibold text-slate-950">Read-only access</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Your role can review stock posture and the movement ledger, but only Admin and
-                System Manager accounts can record adjustments or transfers.
-              </p>
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-500">
+            Quick actions are only available to users with inventory management permissions.
+          </div>
+        )}
       </section>
 
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">Low-stock view</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Rows needing attention first, sorted by shortage severity after reserved stock is
-            applied.
-          </p>
-        </div>
-        <LowStockTable lowStockRows={lowStockRows} />
-      </section>
+      {warehouses.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Building2 className="size-4 text-slate-500" strokeWidth={2.1} />
+            <h2 className="text-lg font-semibold text-slate-950">Warehouses</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {warehouses.map((location) => (
+              <InventoryLocationCardLink key={location.id} location={location} />
+            ))}
+          </div>
+        </section>
+      )}
 
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">Movement ledger</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            The 40 most recent inventory movements for the current filter set.
-          </p>
+      {branches.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Store className="size-4 text-slate-500" strokeWidth={2.1} />
+            <h2 className="text-lg font-semibold text-slate-950">Branches</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {branches.map((location) => (
+              <InventoryLocationCardLink key={location.id} location={location} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {locationCards.length === 0 && (
+        <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-8 text-center text-sm leading-6 text-slate-500">
+          <Globe2 className="mx-auto mb-3 size-8 text-slate-300" strokeWidth={1.5} />
+          No active locations found. Create a warehouse or branch to begin tracking inventory.
         </div>
-        <InventoryMovementTable movements={movements} />
-      </section>
+      )}
     </div>
   );
 }

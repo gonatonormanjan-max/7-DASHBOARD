@@ -47,10 +47,10 @@ export async function getProductListData(filters: ProductListFilters) {
         }
       : {}),
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
-    ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+    ...(filters.brandId ? { brandId: filters.brandId } : {}),
   };
 
-  const [totalCount, categories, suppliers, summary] = await Promise.all([
+  const [totalCount, categories, brands, summary] = await Promise.all([
     prisma.product.count({ where }),
     prisma.category.findMany({
       orderBy: { name: "asc" },
@@ -59,7 +59,7 @@ export async function getProductListData(filters: ProductListFilters) {
         name: true,
       },
     }),
-    prisma.supplier.findMany({
+    prisma.brand.findMany({
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -100,7 +100,7 @@ export async function getProductListData(filters: ProductListFilters) {
           name: true,
         },
       },
-      supplier: {
+      brand: {
         select: {
           id: true,
           name: true,
@@ -112,7 +112,7 @@ export async function getProductListData(filters: ProductListFilters) {
   return {
     products,
     categories,
-    suppliers,
+    brands,
     pagination,
     summary: {
       totalVisible: summary
@@ -144,28 +144,51 @@ export async function getProductById(id: string) {
       createdAt: true,
       updatedAt: true,
       categoryId: true,
-      supplierId: true,
+      brandId: true,
       category: {
         select: {
           id: true,
           name: true,
         },
       },
-      supplier: {
+      brand: {
         select: {
           id: true,
           name: true,
-          email: true,
-          phone: true,
         },
+      },
+      suppliers: {
+        select: {
+          supplierId: true,
+          isPrimary: true,
+          costPrice: true,
+          leadTimeDays: true,
+          notes: true,
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+        orderBy: { isPrimary: "desc" },
       },
     },
   });
 }
 
 export async function getProductFormOptions() {
-  const [categories, suppliers] = await Promise.all([
+  const [categories, brands, suppliers] = await Promise.all([
     prisma.category.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+      },
+    }),
+    prisma.brand.findMany({
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -182,8 +205,5 @@ export async function getProductFormOptions() {
     }),
   ]);
 
-  return {
-    categories,
-    suppliers,
-  };
+  return { categories, brands, suppliers };
 }

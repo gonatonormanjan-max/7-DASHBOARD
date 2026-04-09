@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash \"C:\\\\Users\\\\margu\\\\.claude\\\\plugins\\\\cache\\\\claude-plugins-official\\\\superpowers\\\\5.0.6\\\\skills\\\\brainstorming\\\\scripts\\\\start-server.sh\" --project-dir \"c:\\\\Users\\\\margu\\\\OneDrive\\\\Desktop\\\\7dashboard\")",
+      "Bash(xargs grep:*)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(node -e \"console.log\\(require\\(''crypto''\\).randomBytes\\(32\\).toString\\(''hex''\\)\\)\")",
+      "Bash(grep -r \"prisma-client-js\\\\|prisma-client\" /c/Users/margu/OneDrive/Desktop/7dashboard/node_modules/prisma/dist/cli/ --include=*.js -l)"
+    ]
+  }
+}

@@ -12,13 +12,13 @@ type Option = {
 type ProductsFiltersProps = {
   filters: ProductListFilters;
   categories: Option[];
-  suppliers: Option[];
+  brands: Option[];
 };
 
 export function ProductsFilters({
   filters,
   categories,
-  suppliers,
+  brands,
 }: ProductsFiltersProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,16 +67,16 @@ export function ProductsFilters({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Supplier</span>
+          <span className="text-sm font-medium text-slate-700">Brand</span>
           <select
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
-            defaultValue={filters.supplierId ?? ""}
-            name="supplierId"
+            defaultValue={filters.brandId ?? ""}
+            name="brandId"
           >
-            <option value="">All suppliers</option>
-            {suppliers.map((supplier) => (
-              <option key={supplier.id} value={supplier.id}>
-                {supplier.name}
+            <option value="">All brands</option>
+            {brands.map((brand) => (
+              <option key={brand.id} value={brand.id}>
+                {brand.name}
               </option>
             ))}
           </select>

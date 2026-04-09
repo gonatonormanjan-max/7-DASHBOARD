@@ -1,154 +1,243 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { MockDataPanel } from "@/components/dashboard/mock-data-panel";
-import { requireUser } from "@/lib/dal/auth";
-import { getRoleLabel, hasPermission, type PermissionResource } from "@/lib/permissions";
+import { RecentActivity } from "@/components/dashboard/recent-activity";
+import { requirePermission } from "@/lib/dal/auth";
+import { getDashboardData } from "@/lib/dal/dashboard";
+import { hasPermission, type PermissionResource } from "@/lib/permissions";
 
 const roleCopy = {
   ADMIN: {
-    title: "Enterprise inventory command center",
+    eyebrow: "Welcome back",
+    title: "Admin Dashboard",
     description:
-      "You have full control across operations, stock governance, reporting, and ownership-level configuration.",
+      "Full control across inventory, products, locations, orders, reports, users, and settings.",
   },
   SYSTEM_MANAGER: {
-    title: "Operational control and oversight",
+    eyebrow: "Welcome back",
+    title: "Operations Dashboard",
     description:
-      "You can manage daily inventory operations, monitor risk, and coordinate teams without ownership-only settings.",
+      "Manage daily inventory operations, monitor stock health, and coordinate across locations.",
   },
   SALES_STAFF: {
-    title: "Sales execution workspace",
+    eyebrow: "Welcome back",
+    title: "Sales Workspace",
     description:
-      "You can monitor product availability, create sales orders, and follow delivery progress without direct stock edits.",
+      "Monitor product availability and record sales orders for your assigned location.",
   },
 } as const;
 
-const capabilityCards: Array<{
+const moduleLinks: Array<{
   title: string;
+  description: string;
+  href: string;
   resource: PermissionResource;
-  primaryAction: "read" | "create";
-  detail: string;
+  action: "read" | "create";
 }> = [
   {
-    title: "Products and Catalog",
+    title: "Products",
+    description: "Browse and manage the product catalog — SKUs, pricing, categories, and brands.",
+    href: "/dashboard/products",
     resource: "products",
-    primaryAction: "read",
-    detail: "Track SKUs, categories, suppliers, pricing, and product catalog records.",
+    action: "read",
   },
   {
-    title: "Warehouse Operations",
-    resource: "locations",
-    primaryAction: "read",
-    detail: "Review stock by warehouse, transfer readiness, and threshold-driven replenishment points.",
+    title: "Inventory",
+    description: "View live stock by location, record movements, and adjust counts.",
+    href: "/dashboard/inventory",
+    resource: "inventory",
+    action: "read",
   },
   {
-    title: "Orders and Movements",
+    title: "Sales Orders",
+    description: "Record new sales and view completed transaction history.",
+    href: "/dashboard/sales-orders",
     resource: "sales_orders",
-    primaryAction: "create",
-    detail: "Process sales flow through controlled inventory effects rather than freeform stock edits.",
+    action: "read",
   },
   {
-    title: "Reporting and Controls",
+    title: "Locations",
+    description: "Manage warehouse and branch locations for your business.",
+    href: "/dashboard/locations",
+    resource: "locations",
+    action: "read",
+  },
+  {
+    title: "Categories",
+    description: "Organize products using categories and brands.",
+    href: "/dashboard/categories",
+    resource: "categories",
+    action: "read",
+  },
+  {
+    title: "Reports",
+    description: "Analyze sales trends, stock health, and operational performance.",
+    href: "/dashboard/reports",
     resource: "reports",
-    primaryAction: "read",
-    detail: "Analyze valuation, low stock, movement history, and operational performance over time.",
+    action: "read",
   },
 ];
 
+const currencyFormatter = new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: "PHP",
+});
+
+type DashboardStatLinkCardProps = {
+  label: string;
+  value: string;
+  description?: string;
+  tone?: "default" | "primary" | "success" | "warning";
+  href?: string;
+};
+
+function DashboardStatLinkCard({
+  href,
+  label,
+  value,
+  description,
+  tone,
+}: DashboardStatLinkCardProps) {
+  const content = (
+    <StatCard
+      description={description}
+      label={label}
+      tone={tone}
+      value={value}
+    />
+  );
+
+  if (!href) {
+    return content;
+  }
+
+  return (
+    <Link
+      className="block rounded-[24px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+      href={href}
+    >
+      {content}
+    </Link>
+  );
+}
+
+function formatLocationCount(count: number, singular: string, plural: string) {
+  return `${count.toLocaleString("en-US")} ${count === 1 ? singular : plural}`;
+}
+
 export default async function DashboardPage() {
-  const user = await requireUser();
+  const user = await requirePermission("dashboard", "read");
   const copy = roleCopy[user.role];
+  const dashboardData = await getDashboardData(
+    user.id,
+    user.role,
+    user.assignedLocationId ?? null
+  );
+  const revenueToday = currencyFormatter.format(dashboardData.revenueToday);
+  const warehouses = dashboardData.locationHealth.filter(
+    (location) => location.type === "WAREHOUSE"
+  ).length;
+  const branches = dashboardData.locationHealth.filter(
+    (location) => location.type === "BRANCH"
+  ).length;
 
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="Inventory MVP"
+        eyebrow={`${copy.eyebrow}, ${user.firstName}`}
         title={copy.title}
         description={copy.description}
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Role Access"
-          value={getRoleLabel(user.role)}
-          tone="primary"
-          description="Role-aware session and navigation are now enforced from the server."
-        />
-        <StatCard
-          label="Direct Stock Edits"
-          value={user.role === "SALES_STAFF" ? "Blocked" : "Controlled"}
-          tone={user.role === "SALES_STAFF" ? "warning" : "success"}
-          description="Inventory changes will flow through purchase receipts, sales fulfillment, transfers, and adjustments."
-        />
-        <StatCard
-          label="Protected Modules"
-          value="11 Areas"
-          description="Dashboard, products, warehouses, inventory, suppliers, orders, reports, users, audit logs, and settings."
-        />
-        <StatCard
-          label="Audit Scope"
-          value={user.role === "SALES_STAFF" ? "Limited" : "Operational"}
-          description="Critical actions are prepared for structured audit logging and role-based review."
-        />
+        {user.role === "SALES_STAFF" ? (
+          <>
+            <DashboardStatLinkCard
+              description={`${revenueToday} revenue`}
+              label="My Orders Today"
+              tone="primary"
+              value={dashboardData.ordersToday.toLocaleString("en-US")}
+            />
+            <DashboardStatLinkCard
+              description="Confirmed orders pending delivery"
+              label="Awaiting Delivery"
+              tone={dashboardData.ordersAwaitingDelivery > 0 ? "warning" : "success"}
+              value={dashboardData.ordersAwaitingDelivery.toLocaleString("en-US")}
+            />
+            <DashboardStatLinkCard
+              description={
+                user.assignedLocationId ? "At your assigned location" : "Across all locations"
+              }
+              href="/dashboard/inventory"
+              label="Low Stock"
+              tone={dashboardData.lowStockAlerts > 0 ? "warning" : "success"}
+              value={dashboardData.lowStockAlerts.toLocaleString("en-US")}
+            />
+            <DashboardStatLinkCard
+              description="Open the sales order form to record a new transaction."
+              href="/dashboard/sales-orders/new"
+              label="Quick Action"
+              tone="primary"
+              value="New Sale"
+            />
+          </>
+        ) : (
+          <>
+            <DashboardStatLinkCard
+              description={`${revenueToday} total revenue`}
+              label="Orders Today"
+              tone="primary"
+              value={dashboardData.ordersToday.toLocaleString("en-US")}
+            />
+            <DashboardStatLinkCard
+              description="Confirmed orders pending delivery"
+              label="Awaiting Delivery"
+              tone={dashboardData.ordersAwaitingDelivery > 0 ? "warning" : "success"}
+              value={dashboardData.ordersAwaitingDelivery.toLocaleString("en-US")}
+            />
+            <DashboardStatLinkCard
+              description="Products at or below reorder level"
+              href="/dashboard/inventory"
+              label="Low Stock Alerts"
+              tone={dashboardData.lowStockAlerts > 0 ? "warning" : "success"}
+              value={dashboardData.lowStockAlerts.toLocaleString("en-US")}
+            />
+            <DashboardStatLinkCard
+              description={`${formatLocationCount(warehouses, "warehouse", "warehouses")}, ${formatLocationCount(branches, "branch", "branches")}`}
+              label="Locations Active"
+              tone="primary"
+              value={dashboardData.locationHealth.length.toLocaleString("en-US")}
+            />
+          </>
+        )}
       </section>
 
-      {user.role === "ADMIN" ? <MockDataPanel /> : null}
-
-      <section className="grid gap-6 xl:grid-cols-[1.35fr_0.85fr]">
-        <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950">Accessible workstreams</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                This workspace is now gated by the shared permission matrix rather than UI-only hiding.
-              </p>
-            </div>
-            <StatusBadge status="active" />
-          </div>
-
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            {capabilityCards.map((card) => {
-              const allowed = hasPermission(user.role, card.resource, card.primaryAction);
-
-              return (
-                <div
-                  key={card.title}
-                  className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-5"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <h3 className="font-semibold text-slate-900">{card.title}</h3>
-                    <StatusBadge status={allowed ? "active" : "locked"} />
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{card.detail}</p>
-                </div>
-              );
-            })}
-          </div>
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">Modules</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Jump directly to the tools you need.
+          </p>
         </div>
 
-        <aside className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
-          <h2 className="text-lg font-semibold text-slate-950">Implementation baseline</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            The foundation layer is in place for the next build slices.
-          </p>
-
-          <div className="mt-6 space-y-4">
-            {[
-              "Expanded Prisma domain models for inventory, warehouses, orders, movements, and audit logs.",
-              "Role-aware auth sessions now carry server-verifiable access metadata.",
-              "Shared navigation and authorization rules are centralized for future modules.",
-              "Dashboard shell is ready for live KPIs, charts, tables, and module routes.",
-            ].map((item) => (
-              <div
-                key={item}
-                className="rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm leading-6 text-slate-600"
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {moduleLinks
+            .filter((link) => hasPermission(user.role, link.resource, link.action))
+            .map((link) => (
+              <Link
+                key={link.href}
+                className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+                href={link.href}
               >
-                {item}
-              </div>
+                <h3 className="font-semibold text-slate-950">{link.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{link.description}</p>
+              </Link>
             ))}
-          </div>
-        </aside>
+        </div>
       </section>
+
+      <RecentActivity movements={dashboardData.recentMovements} />
     </div>
   );
 }

@@ -22,7 +22,7 @@ type StockRow = {
       id: string;
       name: string;
     };
-    supplier: {
+    brand: {
       id: string;
       name: string;
     } | null;
@@ -111,7 +111,7 @@ export function InventoryStockTable({ stockRows }: InventoryStockTableProps) {
                     {row.product.reorderLevel.toLocaleString("en-US")}
                   </td>
                   <td className="px-5 py-4 text-sm text-slate-600">
-                    {row.product.supplier?.name ?? "Unassigned"}
+                    {row.product.brand?.name ?? "Unbranded"}
                   </td>
                   <td className="px-5 py-4 text-sm text-slate-500">
                     {row.updatedAt.toLocaleDateString("en-US", {

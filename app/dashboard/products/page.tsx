@@ -19,7 +19,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const user = await requirePermission("products", "read");
   const rawSearchParams = await searchParams;
   const filters = parseProductListFilters(rawSearchParams);
-  const { products, categories, suppliers, pagination, summary } = await getProductListData(filters);
+  const { products, categories, brands, pagination, summary } = await getProductListData(filters);
   const canCreate = hasPermission(user.role, "products", "create");
   const canManage = hasPermission(user.role, "products", "update");
   const canViewCost = hasPermission(user.role, "products", "update");
@@ -27,7 +27,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 
   if (filters.query) returnParams.set("query", filters.query);
   if (filters.categoryId) returnParams.set("categoryId", filters.categoryId);
-  if (filters.supplierId) returnParams.set("supplierId", filters.supplierId);
+  if (filters.brandId) returnParams.set("brandId", filters.brandId);
   if (filters.status !== "visible") returnParams.set("status", filters.status);
   if (filters.sortBy !== "updatedAt") returnParams.set("sortBy", filters.sortBy);
   if (filters.sortOrder !== "desc") returnParams.set("sortOrder", filters.sortOrder);
@@ -43,7 +43,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
     const params = new URLSearchParams();
     if (filters.query) params.set("query", filters.query);
     if (filters.categoryId) params.set("categoryId", filters.categoryId);
-    if (filters.supplierId) params.set("supplierId", filters.supplierId);
+    if (filters.brandId) params.set("brandId", filters.brandId);
     if (filters.status !== "visible") params.set("status", filters.status);
     if (pagination.pageSize !== DEFAULT_PAGE_SIZE) {
       params.set("pageSize", String(pagination.pageSize));
@@ -101,8 +101,8 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 
       <ProductsFilters
         categories={categories}
+        brands={brands}
         filters={filters}
-        suppliers={suppliers}
       />
 
       <ProductsTable
@@ -121,7 +121,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         query={{
           query: filters.query || undefined,
           categoryId: filters.categoryId,
-          supplierId: filters.supplierId,
+          brandId: filters.brandId,
           status: filters.status === "visible" ? undefined : filters.status,
           sortBy: filters.sortBy === "updatedAt" ? undefined : filters.sortBy,
           sortOrder: filters.sortOrder === "desc" ? undefined : filters.sortOrder,

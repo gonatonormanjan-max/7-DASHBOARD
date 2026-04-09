@@ -1,9 +1,128 @@
 import "server-only";
 
-import { Prisma, ProductStatus } from "@prisma/client";
+import {
+  Prisma,
+  ProductStatus,
+  type LocationType,
+  type MovementType,
+} from "@prisma/client";
 import { getAvailableQuantity } from "@/lib/inventory";
+import { getPaginationMeta } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
-import type { InventoryPageFilters } from "@/lib/validators/inventory";
+import type {
+  InventoryPageFilters,
+  InventoryStockSortField,
+} from "@/lib/validators/inventory";
+
+const inventoryVisibleProductStatuses: ProductStatus[] = [
+  ProductStatus.ACTIVE,
+  ProductStatus.INACTIVE,
+];
+
+const inventoryStockSelect = {
+  id: true,
+  quantity: true,
+  reservedQty: true,
+  updatedAt: true,
+  product: {
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      reorderLevel: true,
+      category: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      brand: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.LocationStockSelect;
+
+type InventoryScopeLocationId = string | "system-wide";
+type InventoryPageDataFilters = InventoryPageFilters & {
+  locationId: InventoryScopeLocationId;
+};
+type RawInventoryStockRow = Prisma.LocationStockGetPayload<{
+  select: typeof inventoryStockSelect;
+}>;
+
+export type InventoryLocationCard = {
+  id: string;
+  name: string;
+  code: string;
+  type: LocationType;
+  skuCount: number;
+  totalOnHand: number;
+  lowStockCount: number;
+};
+
+export type InventoryLandingSummary = {
+  totalSkus: number;
+  totalOnHand: number;
+  totalLowStock: number;
+  totalOutOfStock: number;
+};
+
+export type InventoryStockRow = {
+  id: string;
+  quantity: number;
+  reservedQty: number;
+  availableQty: number;
+  updatedAt: Date | null;
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+    reorderLevel: number;
+    category: {
+      id: string;
+      name: string;
+    };
+    brand: {
+      id: string;
+      name: string;
+    } | null;
+  };
+};
+
+export type InventoryMovementRow = {
+  id: string;
+  type: MovementType;
+  quantityChange: number;
+  transferGroupId: string | null;
+  createdAt: Date;
+  notes: string | null;
+  location: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+  };
+  performedBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+};
+
+export type InventorySummary = {
+  skuCount: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  onHandUnits: number;
+};
 
 function getDateRangeWhere(filters: InventoryPageFilters) {
   const createdAt: Prisma.DateTimeFilter = {};
@@ -22,7 +141,7 @@ function getDateRangeWhere(filters: InventoryPageFilters) {
 function getInventoryProductWhere(filters: InventoryPageFilters): Prisma.ProductWhereInput {
   return {
     status: {
-      in: [ProductStatus.ACTIVE, ProductStatus.INACTIVE],
+      in: inventoryVisibleProductStatuses,
     },
     ...(filters.query
       ? {
@@ -33,81 +152,230 @@ function getInventoryProductWhere(filters: InventoryPageFilters): Prisma.Product
         }
       : {}),
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
-    ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+    ...(filters.brandId ? { brandId: filters.brandId } : {}),
   };
 }
 
-function isLowStockRow(row: {
-  quantity: number;
-  reservedQty: number;
-  product: { reorderLevel: number };
-}) {
-  const availableQty = getAvailableQuantity(row.quantity, row.reservedQty);
-  return row.product.reorderLevel > 0 && availableQty <= row.product.reorderLevel;
+function getStockMetrics(
+  quantity: number,
+  reservedQty: number,
+  reorderLevel: number
+) {
+  const availableQty = getAvailableQuantity(quantity, reservedQty);
+  const isLowStock =
+    reorderLevel > 0 && availableQty <= reorderLevel;
+  const isOutOfStock = availableQty <= 0;
+
+  return {
+    availableQty,
+    isLowStock,
+    isOutOfStock,
+  };
 }
 
-export async function getInventoryPageData(filters: InventoryPageFilters) {
+function mapStockRow(row: RawInventoryStockRow): InventoryStockRow {
+  return {
+    id: row.id,
+    quantity: row.quantity,
+    reservedQty: row.reservedQty,
+    availableQty: getAvailableQuantity(row.quantity, row.reservedQty),
+    updatedAt: row.updatedAt,
+    product: row.product,
+  };
+}
+
+function aggregateSystemWideStockRows(rows: RawInventoryStockRow[]) {
+  const groupedRows = new Map<string, InventoryStockRow>();
+
+  for (const row of rows) {
+    const existing = groupedRows.get(row.product.id);
+
+    if (!existing) {
+      groupedRows.set(row.product.id, mapStockRow(row));
+      continue;
+    }
+
+    existing.quantity += row.quantity;
+    existing.reservedQty += row.reservedQty;
+    existing.availableQty = getAvailableQuantity(existing.quantity, existing.reservedQty);
+    existing.updatedAt =
+      existing.updatedAt && existing.updatedAt > row.updatedAt ? existing.updatedAt : row.updatedAt;
+  }
+
+  return [...groupedRows.values()];
+}
+
+function sortInventoryStockRows(
+  rows: InventoryStockRow[],
+  sortBy: InventoryStockSortField,
+  sortOrder: "asc" | "desc"
+) {
+  const direction = sortOrder === "asc" ? 1 : -1;
+
+  return [...rows].sort((left, right) => {
+    const leftBrand = left.product.brand?.name ?? "Unbranded";
+    const rightBrand = right.product.brand?.name ?? "Unbranded";
+    let result = 0;
+
+    switch (sortBy) {
+      case "sku":
+        result = left.product.sku.localeCompare(right.product.sku);
+        break;
+      case "category":
+        result = left.product.category.name.localeCompare(right.product.category.name);
+        break;
+      case "brand":
+        result = leftBrand.localeCompare(rightBrand);
+        break;
+      case "quantity":
+        result = left.quantity - right.quantity;
+        break;
+      case "reservedQty":
+        result = left.reservedQty - right.reservedQty;
+        break;
+      case "availableQty":
+        result = left.availableQty - right.availableQty;
+        break;
+      case "reorderLevel":
+        result = left.product.reorderLevel - right.product.reorderLevel;
+        break;
+      default:
+        result = left.product.name.localeCompare(right.product.name);
+        break;
+    }
+
+    return result * direction;
+  });
+}
+
+export async function getInventoryLandingData() {
+  const [locations, stockRows] = await Promise.all([
+    prisma.stockLocation.findMany({
+      where: { isActive: true },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, code: true, type: true },
+    }),
+    prisma.locationStock.findMany({
+      select: {
+        locationId: true,
+        quantity: true,
+        reservedQty: true,
+        product: { select: { reorderLevel: true } },
+      },
+    }),
+  ]);
+
+  const locationCards: InventoryLocationCard[] = locations.map((location) => {
+    const locationStockRows = stockRows.filter(
+      (row) => row.locationId === location.id
+    );
+
+    const skuCount = locationStockRows.filter(
+      (row) => row.quantity > 0
+    ).length;
+
+    const totalOnHand = locationStockRows.reduce(
+      (sum, row) => sum + row.quantity,
+      0
+    );
+
+    const lowStockCount = locationStockRows.filter((row) => {
+      const availableQty = getAvailableQuantity(row.quantity, row.reservedQty);
+      return (
+        row.product.reorderLevel > 0 && availableQty <= row.product.reorderLevel
+      );
+    }).length;
+
+    return {
+      id: location.id,
+      name: location.name,
+      code: location.code,
+      type: location.type,
+      skuCount,
+      totalOnHand,
+      lowStockCount,
+    };
+  });
+
+  const seenProductIds = new Set<string>();
+  let totalSkus = 0;
+  let totalLowStock = 0;
+  let totalOutOfStock = 0;
+
+  for (const row of stockRows) {
+    if (!seenProductIds.has(row.product.id)) {
+      seenProductIds.add(row.product.id);
+      totalSkus++;
+    }
+  }
+
+  for (const row of stockRows) {
+    const availableQty = getAvailableQuantity(row.quantity, row.reservedQty);
+    if (
+      row.product.reorderLevel > 0 &&
+      availableQty <= row.product.reorderLevel
+    ) {
+      totalLowStock++;
+    }
+    if (availableQty <= 0) {
+      totalOutOfStock++;
+    }
+  }
+
+  const totalOnHand = stockRows.reduce((sum, row) => sum + row.quantity, 0);
+
+  const globalSummary: InventoryLandingSummary = {
+    totalSkus,
+    totalOnHand,
+    totalLowStock,
+    totalOutOfStock,
+  };
+
+  return {
+    locationCards,
+    globalSummary,
+  };
+}
+
+export async function getInventoryPageData(
+  filters: InventoryPageDataFilters
+) {
   const productWhere = getInventoryProductWhere(filters);
-  const createdAt = getDateRangeWhere(filters);
+  const dateRangeWhere = getDateRangeWhere(filters);
 
-  const stockWhere: Prisma.LocationStockWhereInput = {
-    ...(filters.locationId ? { locationId: filters.locationId } : {}),
-    product: productWhere,
-  };
+  const locationWhere =
+    filters.locationId === "system-wide"
+      ? { location: { isActive: true } }
+      : { locationId: filters.locationId };
 
-  const movementWhere: Prisma.InventoryMovementWhereInput = {
-    ...(filters.locationId ? { locationId: filters.locationId } : {}),
-    ...(filters.movementType !== "all" ? { type: filters.movementType } : {}),
-    ...(createdAt ? { createdAt } : {}),
-    product: productWhere,
-  };
+  const movementTypeWhere =
+    filters.movementType === "all"
+      ? {}
+      : { type: filters.movementType as MovementType };
 
-  const [stockRows, movements, locations, categories, suppliers, products] =
+  const [stockRows, movements, categories, brands, products] =
     await Promise.all([
       prisma.locationStock.findMany({
-        where: stockWhere,
-        orderBy: [{ location: { name: "asc" } }, { product: { name: "asc" } }],
-        select: {
-          id: true,
-          quantity: true,
-          reservedQty: true,
-          updatedAt: true,
-          location: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
-              type: true,
-              isActive: true,
-            },
-          },
-          product: {
-            select: {
-              id: true,
-              name: true,
-              sku: true,
-              reorderLevel: true,
-              category: {
-                select: { id: true, name: true },
-              },
-              supplier: {
-                select: { id: true, name: true },
-              },
-            },
-          },
+        where: {
+          ...locationWhere,
+          product: productWhere,
         },
+        select: inventoryStockSelect,
+        orderBy: { product: { name: "asc" } },
       }),
       prisma.inventoryMovement.findMany({
-        where: movementWhere,
-        orderBy: [{ createdAt: "desc" }],
-        take: 40,
+        where: {
+          ...locationWhere,
+          ...movementTypeWhere,
+          ...(dateRangeWhere ? { createdAt: dateRangeWhere } : {}),
+        },
         select: {
           id: true,
           type: true,
           quantityChange: true,
+          transferGroupId: true,
           notes: true,
           createdAt: true,
-          transferGroupId: true,
           location: {
             select: { id: true, name: true, code: true },
           },
@@ -118,65 +386,75 @@ export async function getInventoryPageData(filters: InventoryPageFilters) {
             select: { id: true, firstName: true, lastName: true },
           },
         },
-      }),
-      prisma.stockLocation.findMany({
-        where: { isActive: true },
-        orderBy: [{ name: "asc" }],
-        select: { id: true, name: true, code: true, type: true },
+        orderBy: { createdAt: "desc" },
+        take: 50,
       }),
       prisma.category.findMany({
-        orderBy: [{ name: "asc" }],
         select: { id: true, name: true },
+        orderBy: { name: "asc" },
       }),
-      prisma.supplier.findMany({
-        where: { isActive: true },
-        orderBy: [{ name: "asc" }],
+      prisma.brand.findMany({
         select: { id: true, name: true },
+        orderBy: { name: "asc" },
       }),
       prisma.product.findMany({
-        where: { status: { in: [ProductStatus.ACTIVE, ProductStatus.INACTIVE] } },
-        orderBy: [{ name: "asc" }],
+        where: {
+          status: {
+            in: inventoryVisibleProductStatuses,
+          },
+        },
         select: { id: true, name: true, sku: true },
+        orderBy: { name: "asc" },
       }),
     ]);
 
-  const visibleStockRows = filters.lowStockOnly
-    ? stockRows.filter((row) => isLowStockRow(row))
-    : stockRows;
+  const processedStockRows =
+    filters.locationId === "system-wide"
+      ? aggregateSystemWideStockRows(stockRows)
+      : stockRows.map(mapStockRow);
 
-  const lowStockRows = [...stockRows]
-    .filter((row) => isLowStockRow(row))
-    .sort((left, right) => {
-      const leftShortage =
-        left.product.reorderLevel - getAvailableQuantity(left.quantity, left.reservedQty);
-      const rightShortage =
-        right.product.reorderLevel - getAvailableQuantity(right.quantity, right.reservedQty);
-      return rightShortage - leftShortage || left.product.name.localeCompare(right.product.name);
-    });
-
-  const skuSet = new Set(
-    visibleStockRows
-      .filter((row) => getAvailableQuantity(row.quantity, row.reservedQty) > 0)
-      .map((row) => row.product.id)
+  const sortedStockRows = sortInventoryStockRows(
+    processedStockRows,
+    filters.sortBy,
+    filters.sortOrder
   );
 
+  const lowStockRows = sortedStockRows
+    .filter((row) => {
+      const { isLowStock } = getStockMetrics(
+        row.quantity,
+        row.reservedQty,
+        row.product.reorderLevel
+      );
+      return isLowStock;
+    })
+    .sort((a, b) => {
+      const aAvailable = getAvailableQuantity(a.quantity, a.reservedQty);
+      const bAvailable = getAvailableQuantity(b.quantity, b.reservedQty);
+      const aShortage = a.product.reorderLevel - aAvailable;
+      const bShortage = b.product.reorderLevel - bAvailable;
+      return bShortage - aShortage;
+    });
+
+  const summary: InventorySummary = {
+    skuCount: sortedStockRows.filter((row) => row.availableQty > 0).length,
+    lowStockCount: lowStockRows.length,
+    outOfStockCount: sortedStockRows.filter(
+      (row) => row.availableQty <= 0
+    ).length,
+    onHandUnits: sortedStockRows.reduce((sum, row) => sum + row.quantity, 0),
+  };
+
   return {
-    stockRows: visibleStockRows,
+    stockRows: sortedStockRows,
     lowStockRows,
     movements,
     options: {
-      locations,
       categories,
-      suppliers,
+      brands,
       products,
     },
-    summary: {
-      skuCount: skuSet.size,
-      lowStockCount: lowStockRows.length,
-      outOfStockCount: visibleStockRows.filter(
-        (row) => getAvailableQuantity(row.quantity, row.reservedQty) <= 0
-      ).length,
-      onHandUnits: visibleStockRows.reduce((sum, row) => sum + row.quantity, 0),
-    },
+    summary,
   };
 }
+ 

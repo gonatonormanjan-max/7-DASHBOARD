@@ -7,7 +7,7 @@ import { ProductForm } from "@/components/products/product-form";
 
 export default async function NewProductPage() {
   const user = await requirePermission("products", "create");
-  const { categories, suppliers } = await getProductFormOptions();
+  const { categories, brands, suppliers } = await getProductFormOptions();
 
   return (
     <div className="space-y-8">
@@ -21,6 +21,7 @@ export default async function NewProductPage() {
         action={createProductAction}
         canCreateCategory={hasPermission(user.role, "categories", "create")}
         categories={categories}
+        brands={brands}
         mode="create"
         suppliers={suppliers}
       />

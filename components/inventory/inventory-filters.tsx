@@ -8,7 +8,7 @@ type InventoryFiltersProps = {
     id: string;
     name: string;
   }>;
-  suppliers: Array<{
+  brands: Array<{
     id: string;
     name: string;
   }>;
@@ -27,12 +27,13 @@ const movementTypeOptions = [
   "TRANSFER_IN",
   "CUSTOMER_RETURN",
   "DAMAGED_LOST",
+  "INITIAL_STOCK",
 ] as const;
 
 export function InventoryFilters({
   filters,
   categories,
-  suppliers,
+  brands,
   locations,
 }: InventoryFiltersProps) {
   return (
@@ -85,16 +86,16 @@ export function InventoryFilters({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Supplier</span>
+          <span className="text-sm font-medium text-slate-700">Brand</span>
           <select
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
-            defaultValue={filters.supplierId ?? ""}
-            name="supplierId"
+            defaultValue={filters.brandId ?? ""}
+            name="brandId"
           >
-            <option value="">All suppliers</option>
-            {suppliers.map((supplier) => (
-              <option key={supplier.id} value={supplier.id}>
-                {supplier.name}
+            <option value="">All brands</option>
+            {brands.map((brand) => (
+              <option key={brand.id} value={brand.id}>
+                {brand.name}
               </option>
             ))}
           </select>

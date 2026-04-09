@@ -1,15 +1,12 @@
 import { createSalesOrderAction } from "@/lib/actions/sales-orders";
 import { requirePermission } from "@/lib/dal/auth";
-import { getSalesOrderCreateData, getSalesOrderById } from "@/lib/dal/sales-orders";
-import { SalesOrderFormRedesign as SalesOrderForm } from "@/components/sales-orders/sales-order-form-redesign";
+import { getSalesOrderById, getSalesOrderFormOptions } from "@/lib/dal/sales-orders";
 import { PageHeader } from "@/components/ui/page-header";
-import { hasPermission } from "@/lib/permissions";
+import { SalesOrderForm } from "@/components/sales-orders/sales-order-form";
 
 type NewSalesOrderPageProps = {
   searchParams: Promise<{
     from?: string | string[];
-    location?: string | string[];
-    customerMode?: string | string[];
   }>;
 };
 
@@ -20,38 +17,36 @@ function readParam(value: string | string[] | undefined) {
 export default async function NewSalesOrderPage({
   searchParams,
 }: NewSalesOrderPageProps) {
-  const user = await requirePermission("sales_orders", "create");
+  await requirePermission("sales_orders", "create");
   const resolvedSearchParams = await searchParams;
-  const isCashier = user.role === "SALES_STAFF";
-  const lockedLocationId = isCashier ? (user.assignedLocationId ?? undefined) : undefined;
   const from = readParam(resolvedSearchParams.from);
-  const rememberedLocationId = readParam(resolvedSearchParams.location);
-  const rememberedCustomerMode = readParam(resolvedSearchParams.customerMode);
-  const { products, locations, stockRows } = await getSalesOrderCreateData();
+  const { products, locations } = await getSalesOrderFormOptions();
 
-  // If duplicating from an existing order, load its data for prefill
-  let prefill: {
-    customerName?: string;
-    customerEmail?: string;
-    notes?: string;
-    items?: Array<{
-      productId: string;
-      locationId: string;
-      quantity: number;
-      unitPrice: string;
-    }>;
-  } | undefined;
+  let initialValues:
+    | {
+        locationId?: string;
+        customerName?: string;
+        customerEmail?: string;
+        notes?: string;
+        items?: Array<{
+          productId: string;
+          quantity: number;
+          unitPrice: string;
+        }>;
+      }
+    | undefined;
 
   if (from) {
     const sourceOrder = await getSalesOrderById(from);
+
     if (sourceOrder) {
-      prefill = {
+      initialValues = {
+        locationId: sourceOrder.items[0]?.location.id,
         customerName: sourceOrder.customerName,
         customerEmail: sourceOrder.customerEmail ?? undefined,
         notes: sourceOrder.notes ?? undefined,
         items: sourceOrder.items.map((item) => ({
           productId: item.product.id,
-          locationId: item.location.id,
           quantity: item.quantity,
           unitPrice: item.unitPrice.toString(),
         })),
@@ -62,34 +57,20 @@ export default async function NewSalesOrderPage({
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="Daily Transactions"
-        title={prefill ? "Duplicate sale" : "Record sale"}
+        eyebrow="Sales"
+        title={initialValues ? "Duplicate Sales Order" : "New Sales Order"}
         description={
-          prefill
-            ? "This form is pre-filled from a previous order. Adjust details as needed and submit."
-            : "Record completed purchases with a scan-first cart workflow. Each sale is completed immediately and deducts stock as soon as you submit."
+          initialValues
+            ? "This draft starts with the details from an existing order so you can reuse the same customer and line items."
+            : "Create a branch sales order draft, then move it through confirmation, delivery, and completion from the detail page."
         }
       />
 
       <SalesOrderForm
         action={createSalesOrderAction}
-        products={products}
-        stockRows={stockRows}
+        initialValues={initialValues}
         locations={locations}
-        prefill={prefill}
-        lockedLocationId={lockedLocationId}
-        pricesLocked={isCashier}
-        rememberedDefaults={
-          prefill
-            ? undefined
-            : {
-                locationId: lockedLocationId ?? rememberedLocationId,
-                customerMode:
-                  rememberedCustomerMode === "named"
-                    ? "named"
-                    : "walk_in",
-              }
-        }
+        products={products}
       />
     </div>
   );

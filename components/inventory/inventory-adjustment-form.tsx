@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   initialInventoryAdjustmentState,
   type InventoryAdjustmentState,
@@ -22,6 +22,8 @@ type InventoryAdjustmentFormProps = {
     name: string;
     code: string;
   }>;
+  initialLocationId?: string;
+  returnTo?: string;
 };
 
 function fieldValue(
@@ -36,15 +38,27 @@ export function InventoryAdjustmentForm({
   action,
   products,
   locations,
+  initialLocationId,
+  returnTo,
 }: InventoryAdjustmentFormProps) {
   const [state, formAction] = useActionState(action, initialInventoryAdjustmentState);
   const isReady = products.length > 0 && locations.length > 0;
+  const initialReason = fieldValue(state, "reason", "count_correction");
+  const [reason, setReason] = useState(initialReason);
+  const [direction, setDirection] = useState(
+    initialReason === "damage_loss" || initialReason === "expired"
+      ? "decrease"
+      : fieldValue(state, "direction", "increase")
+  );
+  const directionLocked = reason === "damage_loss" || reason === "expired";
 
   return (
     <form
       action={formAction}
       className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]"
     >
+      {returnTo ? <input name="returnTo" type="hidden" value={returnTo} /> : null}
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-950">Manual adjustment</h2>
@@ -92,7 +106,7 @@ export function InventoryAdjustmentForm({
           <span className="text-sm font-medium text-slate-700">Location</span>
           <select
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
-            defaultValue={fieldValue(state, "locationId")}
+            defaultValue={fieldValue(state, "locationId", initialLocationId ?? "")}
             disabled={!isReady}
             name="locationId"
           >
@@ -111,15 +125,22 @@ export function InventoryAdjustmentForm({
         <div className="grid gap-4 sm:grid-cols-[1fr_1fr]">
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Direction</span>
+            {directionLocked ? <input name="direction" type="hidden" value="decrease" /> : null}
             <select
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
-              defaultValue={fieldValue(state, "direction", "increase")}
-              disabled={!isReady}
+              disabled={!isReady || directionLocked}
               name="direction"
+              onChange={(event) => setDirection(event.target.value)}
+              value={directionLocked ? "decrease" : direction}
             >
               <option value="increase">Increase stock</option>
               <option value="decrease">Decrease stock</option>
             </select>
+            {directionLocked ? (
+              <p className="text-sm text-slate-500">
+                Damage and expiry adjustments are always negative.
+              </p>
+            ) : null}
             {state.fieldErrors?.direction ? (
               <p className="text-sm text-destructive">{state.fieldErrors.direction[0]}</p>
             ) : null}
@@ -144,14 +165,26 @@ export function InventoryAdjustmentForm({
 
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Reason</span>
-          <input
+          <select
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
-            defaultValue={fieldValue(state, "reason")}
             disabled={!isReady}
             name="reason"
-            placeholder="Cycle count correction"
-            type="text"
-          />
+            onChange={(event) => {
+              const nextReason = event.target.value;
+
+              setReason(nextReason);
+
+              if (nextReason === "damage_loss" || nextReason === "expired") {
+                setDirection("decrease");
+              }
+            }}
+          >
+            <option value="">Select a reason</option>
+            <option value="count_correction">Count correction</option>
+            <option value="damage_loss">Damage / loss</option>
+            <option value="expired">Expired</option>
+            <option value="other">Other</option>
+          </select>
           {state.fieldErrors?.reason ? (
             <p className="text-sm text-destructive">{state.fieldErrors.reason[0]}</p>
           ) : null}
@@ -161,10 +194,10 @@ export function InventoryAdjustmentForm({
           <span className="text-sm font-medium text-slate-700">Notes</span>
           <textarea
             className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
-            defaultValue={fieldValue(state, "notes")}
+            defaultValue={state.values?.notes ?? ""}
             disabled={!isReady}
             name="notes"
-            placeholder="Document what changed and why."
+            placeholder="Describe why the stock is being adjusted."
           />
           {state.fieldErrors?.notes ? (
             <p className="text-sm text-destructive">{state.fieldErrors.notes[0]}</p>
@@ -172,10 +205,8 @@ export function InventoryAdjustmentForm({
         </label>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <SubmitButton disabled={!isReady} pendingLabel="Recording...">
-          Record adjustment
-        </SubmitButton>
+      <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+        <SubmitButton disabled={!isReady}>Apply adjustment</SubmitButton>
       </div>
     </form>
   );

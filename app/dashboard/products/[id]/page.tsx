@@ -80,7 +80,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
 
           <div className="grid gap-4 sm:grid-cols-2">
             <DetailField label="Category" value={product.category.name} />
-            <DetailField label="Supplier" value={product.supplier?.name ?? "Unassigned"} />
+            <DetailField label="Brand" value={product.brand?.name ?? "Unbranded"} />
             <DetailField label="Unit price" value={formatCurrency(product.unitPrice.toString())} />
             {canManage ? (
               <DetailField label="Cost" value={formatCurrency(product.costPrice.toString())} />
@@ -95,38 +95,76 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               value={product.description?.trim() ? product.description : "No description provided."}
             />
           </div>
+
+          <div className="border-t border-slate-200 pt-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-slate-950">Suppliers</h2>
+            </div>
+
+            {product.suppliers.length === 0 ? (
+              <p className="text-sm text-slate-500">No suppliers assigned.</p>
+            ) : (
+              <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50/80">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-white/70">
+                    <tr className="text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      <th className="px-4 py-3">Supplier</th>
+                      <th className="px-4 py-3">Cost Price</th>
+                      <th className="px-4 py-3">Lead Time</th>
+                      <th className="px-4 py-3">Primary</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 text-sm text-slate-700">
+                    {product.suppliers.map((productSupplier) => (
+                      <tr key={productSupplier.supplier.id}>
+                        <td className="px-4 py-3">{productSupplier.supplier.name}</td>
+                        <td className="px-4 py-3">
+                          {formatCurrency(productSupplier.costPrice.toString())}
+                        </td>
+                        <td className="px-4 py-3">
+                          {productSupplier.leadTimeDays !== null
+                            ? `${productSupplier.leadTimeDays} days`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {productSupplier.isPrimary ? (
+                            <span className="inline-flex items-center rounded-full bg-[#edf5ff] px-2.5 py-0.5 text-xs font-semibold text-[#16324b]">
+                              Primary
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
-        <aside className="space-y-6">
-          <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
-            <h2 className="text-lg font-semibold text-slate-950">Catalog rules</h2>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-              <p>Sales Staff can view this record but cannot edit it.</p>
-              <p>No stock, warehouse, per-store availability, or variant fields exist in this module.</p>
-              <p>Archived products are hidden from default list views and should be excluded from new transactions.</p>
+        <div className="space-y-4 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+          <h2 className="text-lg font-semibold text-slate-950">Activity</h2>
+          <div className="space-y-2 text-sm text-slate-600">
+            <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
+              <span className="font-medium text-slate-700">Created</span>
+              <span>{product.createdAt.toLocaleDateString("en-PH", { dateStyle: "medium" })}</span>
+            </div>
+            <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
+              <span className="font-medium text-slate-700">Last updated</span>
+              <span>{product.updatedAt.toLocaleDateString("en-PH", { dateStyle: "medium" })}</span>
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
-            <h2 className="text-lg font-semibold text-slate-950">Record activity</h2>
-            <div className="mt-4 space-y-4 text-sm text-slate-600">
-              <DetailField
-                label="Created"
-                value={product.createdAt.toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
-              />
-              <DetailField
-                label="Last updated"
-                value={product.updatedAt.toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
-              />
-            </div>
+          <div className="pt-2">
+            <Link href="/dashboard/products">
+              <Button type="button" variant="ghost" className="w-full">
+                ← Back to Products
+              </Button>
+            </Link>
           </div>
-        </aside>
+        </div>
       </section>
     </div>
   );

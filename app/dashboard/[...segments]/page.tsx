@@ -1,92 +1,20 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
-import { requirePermission } from "@/lib/dal/auth";
-import type { PermissionResource } from "@/lib/permissions";
 
-const moduleConfig: Record<
-  string,
-  { title: string; description: string; resource: PermissionResource }
-> = {
-  products: {
-    title: "Products",
-    description:
-      "Product catalog management will live here, including SKU details, supplier links, pricing, stock posture, and reorder controls.",
-    resource: "products",
-  },
-  suppliers: {
-    title: "Suppliers",
-    description:
-      "Supplier records, contact details, and procurement relationships will be managed here.",
-    resource: "suppliers",
-  },
-  warehouses: {
-    title: "Warehouses",
-    description:
-      "Warehouse-level stock visibility, location details, and transfer workflows will be built into this module.",
-    resource: "locations",
-  },
-  "purchase-orders": {
-    title: "Purchase Orders",
-    description:
-      "Draft, approval, and receiving workflows will connect supplier activity to controlled stock increases.",
-    resource: "purchase_orders",
-  },
-  "sales-orders": {
-    title: "Sales Orders",
-    description:
-      "Sales order creation, confirmation, delivery, and completion will route stock changes through approved workflow stages.",
-    resource: "sales_orders",
-  },
-  "audit-logs": {
-    title: "Audit Logs",
-    description:
-      "Critical operational actions and account changes will be tracked here for Admin and System Manager review.",
-    resource: "audit_logs",
-  },
-  settings: {
-    title: "Settings",
-    description:
-      "System configuration, business defaults, and internal operating thresholds will be managed here.",
-    resource: "settings",
-  },
-};
-
-export default async function DashboardModulePlaceholder({
-  params,
-}: PageProps<"/dashboard/[...segments]">) {
-  const { segments } = await params;
-  const key = segments[0];
-  const selectedModule = moduleConfig[key];
-
-  if (!selectedModule) {
-    notFound();
-  }
-
-  await requirePermission(selectedModule.resource, "read");
-
+export default function DashboardNotFound() {
   return (
-    <div className="space-y-8">
-      <PageHeader
-        eyebrow="Module Scaffold"
-        title={selectedModule.title}
-        description={selectedModule.description}
-        action={
-          <Link href="/dashboard">
-            <Button variant="outline">Back to dashboard</Button>
-          </Link>
-        }
-      />
-
-      <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
-        <h2 className="text-lg font-semibold text-slate-950">Queued for the next phase</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          This route is intentionally scaffolded so the new role-based navigation works
-          today while the underlying module screens, DAL, actions, and table flows are
-          implemented in the next slices.
-        </p>
-      </div>
+    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">404</p>
+      <h1 className="mt-3 text-2xl font-semibold text-slate-950">Page not found</h1>
+      <p className="mt-3 max-w-sm text-sm leading-6 text-slate-500">
+        This page doesn&apos;t exist or hasn&apos;t been built yet. Head back to the dashboard to
+        find what you&apos;re looking for.
+      </p>
+      <Link
+        className="mt-6 rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-[#16304f]"
+        href="/dashboard"
+      >
+        Back to dashboard
+      </Link>
     </div>
   );
 }

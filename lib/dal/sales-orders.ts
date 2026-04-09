@@ -1,41 +1,88 @@
 import "server-only";
 
-import { Prisma, ProductStatus } from "@prisma/client";
+import { LocationType, Prisma, ProductStatus } from "@prisma/client";
 import { getAvailableQuantity } from "@/lib/inventory";
+import {
+  DEFAULT_PAGE,
+  DEFAULT_PAGE_SIZE,
+  getPaginationMeta,
+} from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
+import type { SalesOrderListFilters } from "@/lib/validators/sales-orders";
 
-type SalesOrderListFilters = {
-  query?: string;
-  window?: "all" | "today" | "7d" | "30d";
+type LegacyWindowFilter = "all" | "today" | "7d" | "30d";
+
+type SalesOrderDataFilters = Partial<SalesOrderListFilters> & {
   archived?: boolean;
+  window?: LegacyWindowFilter;
 };
 
-function buildSalesOrderWhere(filters: SalesOrderListFilters): Prisma.SalesOrderWhereInput {
-  const clauses: Prisma.SalesOrderWhereInput[] = [];
-  const query = filters.query?.trim();
+function normalizeFilters(filters: SalesOrderDataFilters) {
+  return {
+    query: filters.query ?? "",
+    status: filters.status ?? "all",
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    page: filters.page ?? DEFAULT_PAGE,
+    pageSize: filters.pageSize ?? DEFAULT_PAGE_SIZE,
+    archived: filters.archived ?? false,
+    window: filters.window ?? "all",
+  } satisfies SalesOrderDataFilters;
+}
 
-  // Filter by archived status
-  if (filters.archived) {
-    clauses.push({ archivedAt: { not: null } });
-  } else {
-    clauses.push({ archivedAt: null });
-  }
+function getCreatedAtFilter(filters: SalesOrderDataFilters) {
+  if (filters.dateFrom || filters.dateTo) {
+    const createdAt: Prisma.DateTimeFilter = {};
 
-  if (filters.window && filters.window !== "all") {
-    const since = new Date();
-
-    if (filters.window === "today") {
-      since.setHours(0, 0, 0, 0);
-    } else {
-      const days = filters.window === "7d" ? 7 : 30;
-      since.setDate(since.getDate() - days);
+    if (filters.dateFrom) {
+      createdAt.gte = new Date(`${filters.dateFrom}T00:00:00`);
     }
 
-    clauses.push({
-      createdAt: {
-        gte: since,
-      },
-    });
+    if (filters.dateTo) {
+      const endOfDay = new Date(`${filters.dateTo}T00:00:00`);
+      endOfDay.setDate(endOfDay.getDate() + 1);
+      createdAt.lt = endOfDay;
+    }
+
+    return createdAt;
+  }
+
+  if (!filters.window || filters.window === "all") {
+    return undefined;
+  }
+
+  const since = new Date();
+
+  if (filters.window === "today") {
+    since.setHours(0, 0, 0, 0);
+  } else {
+    since.setDate(since.getDate() - (filters.window === "7d" ? 7 : 30));
+  }
+
+  return { gte: since } satisfies Prisma.DateTimeFilter;
+}
+
+function buildSalesOrderWhere(
+  filters: SalesOrderDataFilters,
+  options: {
+    ignoreStatus?: boolean;
+  } = {}
+): Prisma.SalesOrderWhereInput {
+  const normalizedFilters = normalizeFilters(filters);
+  const clauses: Prisma.SalesOrderWhereInput[] = [];
+  const query = normalizedFilters.query.trim();
+  const createdAt = getCreatedAtFilter(normalizedFilters);
+
+  clauses.push(
+    normalizedFilters.archived ? { archivedAt: { not: null } } : { archivedAt: null }
+  );
+
+  if (!options.ignoreStatus && normalizedFilters.status !== "all") {
+    clauses.push({ status: normalizedFilters.status });
+  }
+
+  if (createdAt) {
+    clauses.push({ createdAt });
   }
 
   if (query) {
@@ -53,51 +100,30 @@ function buildSalesOrderWhere(filters: SalesOrderListFilters): Prisma.SalesOrder
             mode: "insensitive",
           },
         },
-        {
-          customerEmail: {
-            contains: query,
-            mode: "insensitive",
-          },
-        },
-        {
-          items: {
-            some: {
-              product: {
-                OR: [
-                  {
-                    name: {
-                      contains: query,
-                      mode: "insensitive",
-                    },
-                  },
-                  {
-                    sku: {
-                      contains: query,
-                      mode: "insensitive",
-                    },
-                  },
-                ],
-              },
-            },
-          },
-        },
       ],
     });
   }
 
-  return clauses.length > 0 ? { AND: clauses } : {};
+  return clauses.length === 1 ? clauses[0] : { AND: clauses };
 }
 
-export async function getSalesOrderListData(filters: SalesOrderListFilters = {}) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const where = buildSalesOrderWhere(filters);
+export async function getSalesOrderListData(filters: SalesOrderDataFilters) {
+  const normalizedFilters = normalizeFilters(filters);
+  const where = buildSalesOrderWhere(normalizedFilters);
+  const summaryWhere = buildSalesOrderWhere(normalizedFilters, { ignoreStatus: true });
+  const totalCount = await prisma.salesOrder.count({ where });
+  const pagination = getPaginationMeta(
+    normalizedFilters.page ?? DEFAULT_PAGE,
+    normalizedFilters.pageSize ?? DEFAULT_PAGE_SIZE,
+    totalCount
+  );
 
-  const [orders, totalOrders, todayOrders, aggregate, filteredCount] = await Promise.all([
+  const [orders, groupedSummary, aggregate] = await Promise.all([
     prisma.salesOrder.findMany({
       where,
       orderBy: [{ createdAt: "desc" }],
-      take: 50,
+      skip: (pagination.page - 1) * pagination.pageSize,
+      take: pagination.pageSize,
       select: {
         id: true,
         orderNumber: true,
@@ -118,96 +144,56 @@ export async function getSalesOrderListData(filters: SalesOrderListFilters = {})
             items: true,
           },
         },
-      },
-    }),
-    prisma.salesOrder.count({ where: { archivedAt: null } }),
-    prisma.salesOrder.count({
-      where: {
-        archivedAt: null,
-        createdAt: {
-          gte: today,
+        items: {
+          take: 1,
+          orderBy: [{ createdAt: "asc" }],
+          select: {
+            location: {
+              select: {
+                name: true,
+              },
+            },
+          },
         },
       },
     }),
+    prisma.salesOrder.groupBy({
+      by: ["status"],
+      where: summaryWhere,
+      _count: {
+        _all: true,
+      },
+    }),
     prisma.salesOrder.aggregate({
-      where: { archivedAt: null },
+      where: summaryWhere,
       _sum: {
         totalAmount: true,
       },
     }),
-    prisma.salesOrder.count({ where }),
   ]);
 
   return {
     orders,
+    pagination,
+    filteredCount: totalCount,
     summary: {
-      total: totalOrders,
-      today: todayOrders,
+      total: groupedSummary.reduce((sum, group) => sum + group._count._all, 0),
+      draft: groupedSummary.find((group) => group.status === "DRAFT")?._count._all ?? 0,
+      confirmed:
+        groupedSummary.find((group) => group.status === "CONFIRMED")?._count._all ?? 0,
+      delivered:
+        groupedSummary.find((group) => group.status === "DELIVERED")?._count._all ?? 0,
+      completed:
+        groupedSummary.find((group) => group.status === "COMPLETED")?._count._all ?? 0,
+      cancelled:
+        groupedSummary.find((group) => group.status === "CANCELLED")?._count._all ?? 0,
       revenue: aggregate._sum.totalAmount ?? new Prisma.Decimal(0),
-      recent: orders.length,
     },
-    filteredCount,
-  };
-}
-
-export async function getSalesOrderCreateData() {
-  const [products, locations, stockRows] = await Promise.all([
-    prisma.product.findMany({
-      where: {
-        status: ProductStatus.ACTIVE,
-      },
-      orderBy: [{ name: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        unitPrice: true,
-      },
-    }),
-    prisma.stockLocation.findMany({
-      where: {
-        isActive: true,
-      },
-      orderBy: [{ name: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        code: true,
-      },
-    }),
-    prisma.locationStock.findMany({
-      where: {
-        location: {
-          isActive: true,
-        },
-        product: {
-          status: ProductStatus.ACTIVE,
-        },
-      },
-      select: {
-        locationId: true,
-        productId: true,
-        quantity: true,
-        reservedQty: true,
-      },
-    }),
-  ]);
-
-  return {
-    products: products.map((p) => ({
-      ...p,
-      unitPrice: p.unitPrice.toString(),
-    })),
-    locations,
-    stockRows: stockRows.map((row) => ({
-      ...row,
-      availableQty: getAvailableQuantity(row.quantity, row.reservedQty),
-    })),
   };
 }
 
 export async function getSalesOrderById(id: string) {
-  return prisma.salesOrder.findUnique({
+  const order = await prisma.salesOrder.findUnique({
     where: { id },
     select: {
       id: true,
@@ -217,6 +203,7 @@ export async function getSalesOrderById(id: string) {
       status: true,
       totalAmount: true,
       notes: true,
+      archivedAt: true,
       createdAt: true,
       updatedAt: true,
       createdBy: {
@@ -224,7 +211,6 @@ export async function getSalesOrderById(id: string) {
           id: true,
           firstName: true,
           lastName: true,
-          email: true,
         },
       },
       items: {
@@ -244,11 +230,39 @@ export async function getSalesOrderById(id: string) {
             select: {
               id: true,
               name: true,
-              code: true,
+              type: true,
             },
           },
         },
       },
     },
   });
+
+  return order ?? null;
+}
+
+export async function getSalesOrderFormOptions() {
+  const [locations, products] = await Promise.all([
+    prisma.stockLocation.findMany({
+      where: { isActive: true, type: LocationType.BRANCH },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+      },
+    }),
+    prisma.product.findMany({
+      where: { status: ProductStatus.ACTIVE },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        unitPrice: true,
+      },
+    }),
+  ]);
+
+  return { locations, products };
 }

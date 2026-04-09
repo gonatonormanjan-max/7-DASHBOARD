@@ -47,25 +47,26 @@ enum MovementType {
   TRANSFER_IN
   CUSTOMER_RETURN
   DAMAGED_LOST
+  INITIAL_STOCK
 }
 
 model User {
-  id                  String              @id @default(uuid())
-  firstName           String
-  lastName            String
-  email               String              @unique
-  hashedPassword      String
-  role                Role                @default(SALES_STAFF)
-  isActive            Boolean             @default(true)
-  assignedLocationId  String?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  assignedLocation    StockLocation?      @relation(fields: [assignedLocationId], references: [id], onDelete: SetNull)
-  accounts            Account[]
-  purchaseOrders      PurchaseOrder[]
-  salesOrders         SalesOrder[]
-  inventoryMovements  InventoryMovement[]
-  auditLogs           AuditLog[]
+  id                 String              @id @default(uuid())
+  firstName          String
+  lastName           String
+  email              String              @unique
+  hashedPassword     String
+  role               Role                @default(SALES_STAFF)
+  isActive           Boolean             @default(true)
+  assignedLocationId String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  assignedLocation   StockLocation?      @relation(fields: [assignedLocationId], references: [id], onDelete: SetNull)
+  accounts           Account[]
+  purchaseOrders     PurchaseOrder[]
+  salesOrders        SalesOrder[]
+  inventoryMovements InventoryMovement[]
+  auditLogs          AuditLog[]
 }
 
 model Account {
@@ -95,62 +96,89 @@ model Category {
   products    Product[]
 }
 
+model Brand {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
 model Supplier {
-  id             String          @id @default(uuid())
-  name           String          @unique
+  id             String            @id @default(uuid())
+  name           String            @unique
   contactName    String?
   email          String?
   phone          String?
   address        String?
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  products       Product[]
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  productLinks   ProductSupplier[]
   purchaseOrders PurchaseOrder[]
 }
 
+model ProductSupplier {
+  id           String   @id @default(uuid())
+  productId    String
+  supplierId   String
+  isPrimary    Boolean  @default(false)
+  costPrice    Decimal  @db.Decimal(12, 2)
+  leadTimeDays Int?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, supplierId])
+  @@index([supplierId])
+}
+
 model Product {
-  id             String                @id @default(uuid())
-  name           String
-  sku            String                @unique
-  description    String?
-  unitPrice      Decimal               @db.Decimal(12, 2)
-  costPrice      Decimal               @db.Decimal(12, 2)
-  reorderLevel   Int                   @default(0)
-  imageUrl       String?
-  status         ProductStatus         @default(ACTIVE)
-  categoryId     String
-  supplierId     String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  category       Category              @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  supplier       Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  locationStock  LocationStock[]
-  purchaseItems  PurchaseOrderItem[]
-  salesItems     SalesOrderItem[]
-  movements      InventoryMovement[]
+  id            String              @id @default(uuid())
+  name          String
+  sku           String              @unique
+  description   String?
+  unitPrice     Decimal             @db.Decimal(12, 2)
+  costPrice     Decimal             @db.Decimal(12, 2)
+  reorderLevel  Int                 @default(0)
+  imageUrl      String?
+  status        ProductStatus       @default(ACTIVE)
+  categoryId    String
+  brandId       String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  category      Category            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand         Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  suppliers     ProductSupplier[]
+  locationStock LocationStock[]
+  purchaseItems PurchaseOrderItem[]
+  salesItems    SalesOrderItem[]
+  movements     InventoryMovement[]
 
   @@index([name])
   @@index([categoryId])
-  @@index([supplierId])
+  @@index([brandId])
   @@index([status])
 }
 
 model StockLocation {
-  id             String              @id @default(uuid())
-  name           String              @unique
-  code           String              @unique
-  type           LocationType
-  address        String?
-  managerName    String?
-  contactNumber  String?
-  isActive       Boolean             @default(true)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  assignedUsers  User[]
-  stock          LocationStock[]
-  salesItems     SalesOrderItem[]
-  movements      InventoryMovement[]
+  id            String              @id @default(uuid())
+  name          String              @unique
+  code          String              @unique
+  type          LocationType
+  address       String?
+  managerName   String?
+  contactNumber String?
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  assignedUsers User[]
+  stock         LocationStock[]
+  salesItems    SalesOrderItem[]
+  movements     InventoryMovement[]
 }
 
 model LocationStock {

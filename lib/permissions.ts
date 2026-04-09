@@ -4,7 +4,6 @@ export type PermissionResource =
   | "dashboard"
   | "products"
   | "categories"
-  | "suppliers"
   | "locations"
   | "inventory"
   | "purchase_orders"
@@ -64,7 +63,6 @@ export const permissionMatrix: Record<
     dashboard: ALL_ACTIONS,
     products: ALL_ACTIONS,
     categories: ALL_ACTIONS,
-    suppliers: ALL_ACTIONS,
     locations: ALL_ACTIONS,
     inventory: ALL_ACTIONS,
     purchase_orders: ALL_ACTIONS,
@@ -78,7 +76,6 @@ export const permissionMatrix: Record<
     dashboard: ALL_ACTIONS,
     products: ALL_ACTIONS,
     categories: ALL_ACTIONS,
-    suppliers: ALL_ACTIONS,
     locations: ALL_ACTIONS,
     inventory: ALL_ACTIONS,
     purchase_orders: ALL_ACTIONS,
@@ -122,14 +119,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "layers",
     section: "Operations",
     resource: "categories",
-    action: "read",
-  },
-  {
-    title: "Suppliers",
-    href: "/dashboard/suppliers",
-    icon: "truck",
-    section: "Operations",
-    resource: "suppliers",
     action: "read",
   },
   {

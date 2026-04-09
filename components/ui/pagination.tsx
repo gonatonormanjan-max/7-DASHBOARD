@@ -12,6 +12,7 @@ type PaginationProps = {
   basePath: string;
   pagination: PaginationMeta;
   query?: Record<string, QueryValue>;
+  itemLabel?: string;
 };
 
 function buildHref(
@@ -73,6 +74,7 @@ export function Pagination({
   basePath,
   pagination,
   query = {},
+  itemLabel = "products",
 }: PaginationProps) {
   if (pagination.totalCount === 0 || pagination.totalPages <= 1) {
     return null;
@@ -94,7 +96,7 @@ export function Pagination({
   return (
     <div className="flex flex-col gap-4 rounded-[24px] border border-white/70 bg-white/85 p-5 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] sm:flex-row sm:items-center sm:justify-between">
       <p className="text-sm text-slate-500">
-        Showing {pagination.from}-{pagination.to} of {pagination.totalCount} products
+        Showing {pagination.from}-{pagination.to} of {pagination.totalCount} {itemLabel}
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
