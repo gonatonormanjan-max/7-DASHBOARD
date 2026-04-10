@@ -207,3 +207,25 @@ export async function getProductFormOptions() {
 
   return { categories, brands, suppliers };
 }
+
+// ----------------------------------------------------------------
+// Import helpers
+// ----------------------------------------------------------------
+
+export async function listCategoryOptionsForImport(): Promise<
+  Array<{ id: string; name: string }>
+> {
+  return prisma.category.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+}
+
+export async function listBrandOptionsForImport(): Promise<
+  Array<{ id: string; name: string }>
+> {
+  return prisma.brand.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+}

@@ -66,9 +66,14 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         description="Manage the global product catalog used across internal inventory and order workflows. Archived products stay out of the default list and should not be used for new transactions."
         action={
           canCreate ? (
-            <Link href="/dashboard/products/new">
-              <Button>Create product</Button>
-            </Link>
+            <div className="flex gap-2">
+              <Link href="/dashboard/products/import">
+                <Button variant="outline">Import</Button>
+              </Link>
+              <Link href="/dashboard/products/new">
+                <Button>Create product</Button>
+              </Link>
+            </div>
           ) : null
         }
       />

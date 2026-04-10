@@ -31,9 +31,6 @@ function fieldValue(
   return state.values?.[key] ?? fallback ?? "";
 }
 
-function getTypeLabel(type: "WAREHOUSE" | "BRANCH") {
-  return type === "WAREHOUSE" ? "Warehouse" : "Branch";
-}
 
 export function LocationForm({ action, mode, location }: LocationFormProps) {
   const [state, formAction] = useActionState(action, initialLocationFormState);
@@ -82,36 +79,30 @@ export function LocationForm({ action, mode, location }: LocationFormProps) {
           ) : null}
         </label>
 
-        {mode === "create" ? (
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Location type</span>
-            <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
-              defaultValue={fieldValue(state, "type", location?.type ?? "WAREHOUSE")}
-              name="type"
-            >
-              <option value="WAREHOUSE">Warehouse</option>
-              <option value="BRANCH">Branch</option>
-            </select>
-            {state.fieldErrors?.type ? (
-              <p className="text-sm text-destructive">{state.fieldErrors.type[0]}</p>
-            ) : null}
+        <div className="block space-y-2">
+          <label className="text-sm font-medium text-slate-700" htmlFor="location-type">
+            Location type
           </label>
-        ) : location ? (
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Location type</span>
-            <input name="type" type="hidden" value={location.type} />
-            <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm text-slate-600 outline-none"
-              disabled
-              type="text"
-              value={getTypeLabel(location.type)}
-            />
-            <p className="text-sm text-slate-500">
-              Location type is locked after creation.
+          <select
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            defaultValue={fieldValue(state, "type", location?.type ?? "WAREHOUSE")}
+            id="location-type"
+            name="type"
+          >
+            <option value="WAREHOUSE">Warehouse</option>
+            <option value="BRANCH">Branch</option>
+          </select>
+          {mode === "edit" ? (
+            <p className="text-xs text-slate-500">
+              Changing type affects future operations only — existing stock and movement
+              history are not altered. Warehouses receive from suppliers; branches sell to
+              customers.
             </p>
-          </label>
-        ) : null}
+          ) : null}
+          {state.fieldErrors?.type ? (
+            <p className="text-sm text-destructive">{state.fieldErrors.type[0]}</p>
+          ) : null}
+        </div>
 
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Manager name</span>

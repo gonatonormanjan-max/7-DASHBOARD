@@ -60,6 +60,7 @@ function buildLocationChangedFields(
   currentLocation: {
     name: string;
     code: string;
+    type: "WAREHOUSE" | "BRANCH";
     address: string | null;
     managerName: string | null;
     contactNumber: string | null;
@@ -74,6 +75,10 @@ function buildLocationChangedFields(
 
   if (currentLocation.code !== nextLocation.code) {
     changedFields.push("code");
+  }
+
+  if (currentLocation.type !== nextLocation.type) {
+    changedFields.push("type");
   }
 
   if ((currentLocation.address ?? null) !== nextLocation.address) {
@@ -203,10 +208,7 @@ export async function updateLocationAction(
     notFound();
   }
 
-  const values = {
-    ...extractLocationFormValues(formData),
-    type: currentLocation.type,
-  };
+  const values = extractLocationFormValues(formData);
   const parsed = locationFormSchema.safeParse(values);
 
   if (!parsed.success) {
@@ -245,10 +247,7 @@ export async function updateLocationAction(
     };
   }
 
-  const nextLocation: LocationFormData = {
-    ...parsed.data,
-    type: currentLocation.type,
-  };
+  const nextLocation: LocationFormData = { ...parsed.data };
   const changedFields = buildLocationChangedFields(currentLocation, nextLocation);
 
   await prisma.$transaction(async (tx) => {
@@ -257,7 +256,7 @@ export async function updateLocationAction(
       data: {
         name: nextLocation.name,
         code: nextLocation.code,
-        type: currentLocation.type,
+        type: nextLocation.type,
         address: nextLocation.address,
         managerName: nextLocation.managerName,
         contactNumber: nextLocation.contactNumber,
@@ -273,7 +272,8 @@ export async function updateLocationAction(
         details: {
           name: nextLocation.name,
           code: nextLocation.code,
-          type: currentLocation.type,
+          type: nextLocation.type,
+          previousType: changedFields.includes("type") ? currentLocation.type : undefined,
           changedFields,
         },
       },
