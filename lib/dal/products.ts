@@ -76,7 +76,7 @@ export async function getProductListData(filters: ProductListFilters) {
   ]);
   const pagination = getPaginationMeta(filters.page, filters.pageSize, totalCount);
 
-  const products = await prisma.product.findMany({
+  const rawProducts = await prisma.product.findMany({
     where,
     orderBy: getProductOrderBy(filters),
     skip: (pagination.page - 1) * pagination.pageSize,
@@ -109,6 +109,12 @@ export async function getProductListData(filters: ProductListFilters) {
     },
   });
 
+  const products = rawProducts.map((p) => ({
+    ...p,
+    unitPrice: p.unitPrice.toString(),
+    costPrice: p.costPrice.toString(),
+  }));
+
   return {
     products,
     categories,
@@ -129,7 +135,7 @@ export async function getProductListData(filters: ProductListFilters) {
 }
 
 export async function getProductById(id: string) {
-  return prisma.product.findUnique({
+  const product = await prisma.product.findUnique({
     where: { id },
     select: {
       id: true,
@@ -177,6 +183,18 @@ export async function getProductById(id: string) {
       },
     },
   });
+
+  if (!product) return null;
+
+  return {
+    ...product,
+    unitPrice: product.unitPrice.toString(),
+    costPrice: product.costPrice.toString(),
+    suppliers: product.suppliers.map((s) => ({
+      ...s,
+      costPrice: s.costPrice.toString(),
+    })),
+  };
 }
 
 export async function getProductFormOptions() {

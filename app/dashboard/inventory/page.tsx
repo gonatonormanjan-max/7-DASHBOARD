@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Building2, Database, Globe2, Store, Truck } from "lucide-react";
+import { ArrowRight, Building2, ClipboardList, Database, Globe2, Store, Truck } from "lucide-react";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermission } from "@/lib/dal/auth";
 import { getInventoryLandingData, type InventoryLocationCard } from "@/lib/dal/inventory";
@@ -105,7 +105,7 @@ export default async function InventoryPage() {
         </div>
 
         {canManage ? (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Link
               className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
               href="/dashboard/inventory/receive"
@@ -135,6 +135,23 @@ export default async function InventoryPage() {
                   <h3 className="font-semibold text-slate-950">Set Opening Balance</h3>
                   <p className="mt-1 text-sm text-slate-500">
                     Record the initial stock quantity for a product at a location.
+                  </p>
+                </div>
+              </div>
+            </Link>
+
+            <Link
+              className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+              href="/dashboard/inventory/stock-setup"
+            >
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f5f0ff] text-[#3b1f6e]">
+                  <ClipboardList className="size-5" strokeWidth={2.1} />
+                </span>
+                <div>
+                  <h3 className="font-semibold text-slate-950">Stock Setup</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Set stock quantities in bulk for a warehouse or branch — ideal for new locations and migrations.
                   </p>
                 </div>
               </div>

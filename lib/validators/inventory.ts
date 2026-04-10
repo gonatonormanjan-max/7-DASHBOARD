@@ -132,6 +132,29 @@ export const initialStockSchema = z.object({
   notes: optionalTextArea,
 });
 
+const bulkStockSetupReasonValues = [
+  "new_branch_setup",
+  "warehouse_migration",
+  "system_import",
+  "other",
+] as const;
+
+const bulkStockSetupItemSchema = z.object({
+  productId: z.string().uuid(),
+  quantity: z.coerce.number().int().min(0, "Quantity cannot be negative."),
+});
+
+export const bulkStockSetupSchema = z.object({
+  locationId: z.string().uuid("Select a location."),
+  reason: z.enum(bulkStockSetupReasonValues, {
+    error: "Select a reason.",
+  }),
+  notes: optionalTextArea,
+  items: z
+    .array(bulkStockSetupItemSchema)
+    .min(1, "At least one product must have a quantity change."),
+});
+
 export type InventoryPageFilters = z.output<typeof inventoryFiltersSchema>;
 export type InventoryTab = z.output<typeof inventoryTabSchema>;
 export type InventoryStockSortField = (typeof inventoryStockSortFieldValues)[number];
@@ -142,6 +165,51 @@ export type InventoryTransferData = z.output<typeof inventoryTransferSchema>;
 export type InventoryAdjustmentReason = z.output<typeof inventoryAdjustmentReasonSchema>;
 export type SupplierReceiptData = z.output<typeof supplierReceiptSchema>;
 export type InitialStockData = z.output<typeof initialStockSchema>;
+
+export type BulkStockSetupReason = (typeof bulkStockSetupReasonValues)[number];
+export type BulkStockSetupData = z.output<typeof bulkStockSetupSchema>;
+
+export type BulkStockSetupFormValues = {
+  locationId: string;
+  reason: string;
+  notes: string;
+  items: Array<{
+    productId: string;
+    quantity: string;
+  }>;
+};
+
+export type BulkStockSetupState = InventoryFormState<BulkStockSetupFormValues>;
+
+export const initialBulkStockSetupState: BulkStockSetupState = {
+  status: "idle",
+};
+
+export function extractBulkStockSetupValues(formData: FormData): BulkStockSetupFormValues {
+  const itemIndexes = new Set<number>();
+
+  for (const [key] of formData.entries()) {
+    const match = /^items\[(\d+)\]\.(productId|quantity)$/.exec(key);
+
+    if (match) {
+      itemIndexes.add(Number.parseInt(match[1], 10));
+    }
+  }
+
+  const items = [...itemIndexes]
+    .sort((left, right) => left - right)
+    .map((index) => ({
+      productId: String(formData.get(`items[${index}].productId`) ?? ""),
+      quantity: String(formData.get(`items[${index}].quantity`) ?? ""),
+    }));
+
+  return {
+    locationId: String(formData.get("locationId") ?? ""),
+    reason: String(formData.get("reason") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+    items,
+  };
+}
 
 export type SupplierReceiptFormValues = {
   supplierId: string;

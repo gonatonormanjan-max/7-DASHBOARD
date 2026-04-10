@@ -248,6 +248,67 @@ function sortInventoryStockRows(
   });
 }
 
+export type StockSetupProduct = {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  brand: string | null;
+  currentQty: number;
+};
+
+export async function getStockSetupPageData(locationId: string) {
+  const [location, products, existingStock] = await Promise.all([
+    prisma.stockLocation.findFirst({
+      where: { id: locationId, isActive: true },
+      select: { id: true, name: true, code: true, type: true },
+    }),
+    prisma.product.findMany({
+      where: {
+        status: { in: inventoryVisibleProductStatuses },
+      },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        category: { select: { name: true } },
+        brand: { select: { name: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+    prisma.locationStock.findMany({
+      where: { locationId },
+      select: { productId: true, quantity: true },
+    }),
+  ]);
+
+  const stockByProductId = new Map(
+    existingStock.map((s) => [s.productId, s.quantity])
+  );
+
+  const stockSetupProducts: StockSetupProduct[] = products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    sku: product.sku,
+    category: product.category.name,
+    brand: product.brand?.name ?? null,
+    currentQty: stockByProductId.get(product.id) ?? 0,
+  }));
+
+  return {
+    location,
+    products: stockSetupProducts,
+  };
+}
+
+export async function getStockSetupLocations() {
+  return prisma.stockLocation.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true, code: true, type: true },
+    orderBy: [{ type: "asc" }, { name: "asc" }],
+  });
+}
+
 export async function getInventoryLandingData() {
   const [locations, stockRows] = await Promise.all([
     prisma.stockLocation.findMany({

@@ -173,7 +173,10 @@ export async function getSalesOrderListData(filters: SalesOrderDataFilters) {
   ]);
 
   return {
-    orders,
+    orders: orders.map((o) => ({
+      ...o,
+      totalAmount: o.totalAmount.toString(),
+    })),
     pagination,
     filteredCount: totalCount,
     summary: {
@@ -187,7 +190,7 @@ export async function getSalesOrderListData(filters: SalesOrderDataFilters) {
         groupedSummary.find((group) => group.status === "COMPLETED")?._count._all ?? 0,
       cancelled:
         groupedSummary.find((group) => group.status === "CANCELLED")?._count._all ?? 0,
-      revenue: aggregate._sum.totalAmount ?? new Prisma.Decimal(0),
+      revenue: (aggregate._sum.totalAmount ?? new Prisma.Decimal(0)).toString(),
     },
   };
 }
@@ -238,7 +241,16 @@ export async function getSalesOrderById(id: string) {
     },
   });
 
-  return order ?? null;
+  if (!order) return null;
+
+  return {
+    ...order,
+    totalAmount: order.totalAmount.toString(),
+    items: order.items.map((item) => ({
+      ...item,
+      unitPrice: item.unitPrice.toString(),
+    })),
+  };
 }
 
 export async function getSalesOrderFormOptions() {
@@ -264,5 +276,11 @@ export async function getSalesOrderFormOptions() {
     }),
   ]);
 
-  return { locations, products };
+  return {
+    locations,
+    products: products.map((p) => ({
+      ...p,
+      unitPrice: p.unitPrice.toString(),
+    })),
+  };
 }

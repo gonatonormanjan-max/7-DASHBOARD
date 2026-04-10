@@ -11,17 +11,22 @@ import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
 import {
   buildInventoryFieldErrors,
+  extractBulkStockSetupValues,
   extractInitialStockValues,
   extractInventoryAdjustmentValues,
   extractInventoryTransferValues,
   extractSupplierReceiptValues,
+  initialBulkStockSetupState,
   initialInitialStockState,
   initialInventoryAdjustmentState,
   initialSupplierReceiptState,
+  bulkStockSetupSchema,
   initialStockSchema,
   inventoryAdjustmentSchema,
   inventoryTransferSchema,
   supplierReceiptSchema,
+  type BulkStockSetupReason,
+  type BulkStockSetupState,
   type InitialStockState,
   type InventoryAdjustmentReason,
   type InventoryAdjustmentState,
@@ -33,6 +38,13 @@ const adjustmentReasonLabels: Record<InventoryAdjustmentReason, string> = {
   count_correction: "Count Correction",
   damage_loss: "Damage / Loss",
   expired: "Expired",
+  other: "Other",
+};
+
+const bulkStockSetupReasonLabels: Record<BulkStockSetupReason, string> = {
+  new_branch_setup: "New Branch Setup",
+  warehouse_migration: "Warehouse Migration",
+  system_import: "System Import",
   other: "Other",
 };
 
@@ -56,6 +68,7 @@ function revalidateInventoryPaths(paths: string[] = []) {
     "/dashboard/inventory/system-wide",
     "/dashboard/inventory/receive",
     "/dashboard/inventory/initial-stock",
+    "/dashboard/inventory/stock-setup",
   ]);
 
   for (const path of paths) {
@@ -687,6 +700,171 @@ export async function initialStockAction(
   redirect(
     withFlashMessage("/dashboard/inventory/initial-stock", {
       success: `Opening stock loaded: ${parsed.data.quantity} units of ${product.name} at ${location.name}.`,
+    })
+  );
+}
+
+export async function bulkStockSetupAction(
+  _prevState: BulkStockSetupState,
+  formData: FormData
+): Promise<BulkStockSetupState> {
+  const user = await requirePermission("inventory", "update");
+
+  if (user.role === "SALES_STAFF") {
+    return {
+      status: "error",
+      message: "You do not have permission to perform bulk stock setup.",
+    };
+  }
+
+  const values = extractBulkStockSetupValues(formData);
+
+  // Filter items: only include rows where the user actually entered a quantity > 0
+  const activeItems = values.items.filter(
+    (item) => item.quantity !== "" && item.quantity !== "0"
+  );
+
+  const parsedValues = {
+    ...values,
+    items: activeItems,
+  };
+
+  const parsed = bulkStockSetupSchema.safeParse(parsedValues);
+
+  if (!parsed.success) {
+    return {
+      ...initialBulkStockSetupState,
+      status: "error",
+      message: "Please fix the stock setup details.",
+      fieldErrors: buildInventoryFieldErrors(parsed.error),
+      values,
+    };
+  }
+
+  const productIds = [...new Set(parsed.data.items.map((item) => item.productId))];
+
+  const [location, products, existingStock] = await Promise.all([
+    prisma.stockLocation.findFirst({
+      where: { id: parsed.data.locationId, isActive: true },
+      select: { id: true, name: true, code: true, type: true },
+    }),
+    prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        status: { in: [ProductStatus.ACTIVE, ProductStatus.INACTIVE] },
+      },
+      select: { id: true, name: true, sku: true },
+    }),
+    prisma.locationStock.findMany({
+      where: {
+        locationId: parsed.data.locationId,
+        productId: { in: productIds },
+      },
+      select: { productId: true, quantity: true },
+    }),
+  ]);
+
+  if (!location) {
+    return {
+      status: "error",
+      message: "Select an active location.",
+      fieldErrors: { locationId: ["Select an active location."] },
+      values,
+    };
+  }
+
+  if (products.length !== productIds.length) {
+    return {
+      status: "error",
+      message: "One or more selected products are no longer available.",
+      fieldErrors: { items: ["One or more selected products are not available."] },
+      values,
+    };
+  }
+
+  const productsById = new Map(products.map((p) => [p.id, p]));
+  const existingStockByProductId = new Map(
+    existingStock.map((s) => [s.productId, s.quantity])
+  );
+
+  const batchId = randomUUID();
+  const reasonLabel = bulkStockSetupReasonLabels[parsed.data.reason];
+
+  await prisma.$transaction(async (tx) => {
+    for (const item of parsed.data.items) {
+      const currentQty = existingStockByProductId.get(item.productId) ?? 0;
+      const quantityChange = item.quantity - currentQty;
+
+      // Skip if quantity hasn't actually changed
+      if (quantityChange === 0) {
+        continue;
+      }
+
+      await tx.locationStock.upsert({
+        where: {
+          locationId_productId: {
+            locationId: location.id,
+            productId: item.productId,
+          },
+        },
+        create: {
+          locationId: location.id,
+          productId: item.productId,
+          quantity: item.quantity,
+        },
+        update: {
+          quantity: item.quantity,
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          type: currentQty === 0 ? "INITIAL_STOCK" : "MANUAL_ADJUSTMENT",
+          productId: item.productId,
+          locationId: location.id,
+          quantityChange,
+          referenceType: "inventory.bulk_stock_setup",
+          referenceId: batchId,
+          notes: buildMovementNotes(reasonLabel, parsed.data.notes),
+          performedById: user.id,
+        },
+      });
+    }
+
+    const auditItems = parsed.data.items.map((item) => ({
+      productId: item.productId,
+      productName: productsById.get(item.productId)?.name,
+      sku: productsById.get(item.productId)?.sku,
+      previousQuantity: existingStockByProductId.get(item.productId) ?? 0,
+      newQuantity: item.quantity,
+    }));
+
+    await logAudit(
+      {
+        userId: user.id,
+        action: "inventory.bulk_stock_setup",
+        entity: "bulk_stock_setup",
+        entityId: batchId,
+        details: {
+          locationId: location.id,
+          locationName: location.name,
+          locationType: location.type,
+          reason: parsed.data.reason,
+          reasonLabel,
+          notes: parsed.data.notes,
+          itemCount: parsed.data.items.length,
+          items: auditItems,
+        },
+      },
+      tx
+    );
+  });
+
+  const totalUpdated = parsed.data.items.length;
+  revalidateInventoryPaths([`/dashboard/inventory/${location.id}`]);
+  redirect(
+    withFlashMessage("/dashboard/inventory/stock-setup", {
+      success: `Stock setup complete: ${totalUpdated} product${totalUpdated === 1 ? "" : "s"} updated at ${location.name}.`,
     })
   );
 }

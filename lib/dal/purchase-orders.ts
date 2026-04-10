@@ -125,7 +125,10 @@ export async function getPurchaseOrderListData(filters: Partial<PurchaseOrderLis
   ]);
 
   return {
-    orders,
+    orders: orders.map((o) => ({
+      ...o,
+      totalAmount: o.totalAmount.toString(),
+    })),
     pagination,
     summary: {
       total: groupedSummary.reduce((sum, group) => sum + group._count._all, 0),
@@ -183,7 +186,16 @@ export async function getPurchaseOrderById(id: string) {
     },
   });
 
-  return order ?? null;
+  if (!order) return null;
+
+  return {
+    ...order,
+    totalAmount: order.totalAmount.toString(),
+    items: order.items.map((item) => ({
+      ...item,
+      unitCost: item.unitCost.toString(),
+    })),
+  };
 }
 
 export async function getPurchaseOrderFormOptions() {
@@ -228,5 +240,16 @@ export async function getPurchaseOrderFormOptions() {
     }),
   ]);
 
-  return { suppliers, warehouses, products, supplierProductLinks };
+  return {
+    suppliers,
+    warehouses,
+    products: products.map((p) => ({
+      ...p,
+      costPrice: p.costPrice.toString(),
+    })),
+    supplierProductLinks: supplierProductLinks.map((link) => ({
+      ...link,
+      costPrice: link.costPrice.toString(),
+    })),
+  };
 }
