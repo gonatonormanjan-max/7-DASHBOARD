@@ -575,10 +575,7 @@ export async function createSalesOrderAction(
 export async function confirmSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
 
-  const order = await prisma.salesOrder.findUnique({
-    where: { id: orderId },
-    select: { id: true, orderNumber: true, status: true },
-  });
+  const order = await loadOrderForStatusAction(orderId);
 
   if (!order) {
     return { status: "error" as const, message: "Sales order not found." };
@@ -588,11 +585,37 @@ export async function confirmSalesOrderAction(orderId: string) {
     return { status: "error" as const, message: "Only DRAFT orders can be confirmed." };
   }
 
+  const requirements = buildStockRequirements(order.items as OrderMutationItem[]);
+  const shortages = await findStockShortages(prisma, requirements);
+
+  if (shortages.length > 0) {
+    return {
+      status: "error" as const,
+      message: buildStockShortageMessage(shortages),
+    };
+  }
+
+  const locationIds = [...new Set(order.items.map((item) => item.locationId))];
+
   await prisma.$transaction(async (tx) => {
     await tx.salesOrder.update({
       where: { id: orderId },
       data: { status: "CONFIRMED" },
     });
+
+    for (const requirement of requirements) {
+      await tx.locationStock.update({
+        where: {
+          locationId_productId: {
+            locationId: requirement.locationId,
+            productId: requirement.productId,
+          },
+        },
+        data: {
+          reservedQty: { increment: requirement.quantity },
+        },
+      });
+    }
 
     await logAudit(
       {
@@ -600,13 +623,17 @@ export async function confirmSalesOrderAction(orderId: string) {
         action: "sales_order.confirm",
         entity: "sales_order",
         entityId: orderId,
-        details: { orderNumber: order.orderNumber },
+        details: {
+          orderNumber: order.orderNumber,
+          reservedLocations: locationIds,
+          reservedItemCount: order.items.length,
+        },
       },
       tx
     );
   });
 
-  revalidateSalesOrderPaths({ orderId });
+  revalidateSalesOrderPaths({ orderId, locationIds });
   return { status: "success" as const, message: `Order ${order.orderNumber} confirmed.` };
 }
 
@@ -662,7 +689,10 @@ export async function deliverSalesOrderAction(orderId: string) {
             productId: item.productId,
           },
         },
-        data: { quantity: { decrement: item.quantity } },
+        data: {
+          quantity: { decrement: item.quantity },
+          reservedQty: { decrement: item.quantity },
+        },
       });
     }
 
@@ -741,7 +771,8 @@ export async function cancelSalesOrderAction(orderId: string) {
   }
 
   const wasDelivered = order.status === "DELIVERED";
-  const locationIds = wasDelivered
+  const wasConfirmed = order.status === "CONFIRMED";
+  const locationIds = wasDelivered || wasConfirmed
     ? [...new Set(order.items.map((item) => item.locationId))]
     : [];
 
@@ -778,6 +809,22 @@ export async function cancelSalesOrderAction(orderId: string) {
       }
     }
 
+    if (wasConfirmed) {
+      const requirements = buildStockRequirements(order.items as OrderMutationItem[]);
+
+      for (const req of requirements) {
+        await tx.locationStock.update({
+          where: {
+            locationId_productId: {
+              locationId: req.locationId,
+              productId: req.productId,
+            },
+          },
+          data: { reservedQty: { decrement: req.quantity } },
+        });
+      }
+    }
+
     await logAudit(
       {
         userId: user.id,
@@ -788,6 +835,7 @@ export async function cancelSalesOrderAction(orderId: string) {
           orderNumber: order.orderNumber,
           previousStatus: order.status,
           stockReturned: wasDelivered,
+          reservationReleased: wasConfirmed,
         },
       },
       tx

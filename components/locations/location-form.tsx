@@ -119,7 +119,7 @@ export function LocationForm({ action, mode, location }: LocationFormProps) {
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
             defaultValue={fieldValue(state, "managerName", location?.managerName)}
             name="managerName"
-            placeholder="Ava Santos"
+            placeholder="Renz Alanano"
             type="text"
           />
           {state.fieldErrors?.managerName ? (
