@@ -60,11 +60,11 @@ export function InitialStockForm({
         </div>
       ) : null}
 
-      <div className="grid gap-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm">
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Product</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
             defaultValue={fieldValue(state, "productId")}
             disabled={!isReady}
             name="productId"
@@ -84,7 +84,7 @@ export function InitialStockForm({
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Location</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
             defaultValue={fieldValue(state, "locationId")}
             disabled={!isReady}
             name="locationId"
@@ -104,7 +104,7 @@ export function InitialStockForm({
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Quantity</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
             defaultValue={fieldValue(state, "quantity")}
             disabled={!isReady}
             min={1}
@@ -120,7 +120,7 @@ export function InitialStockForm({
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Notes</span>
           <textarea
-            className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+            className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
             defaultValue={fieldValue(state, "notes")}
             disabled={!isReady}
             name="notes"

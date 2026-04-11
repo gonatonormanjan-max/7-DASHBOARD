@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSyncExternalStore } from "react";
 import {
   Boxes,
+  ChevronLeft,
+  ChevronRight,
   ChartNoAxesCombined,
   ClipboardList,
   LayoutDashboard,
   Layers3,
+  LogOut,
   MoveRight,
   Plus,
   Settings,
@@ -17,10 +21,37 @@ import {
   Users,
   Warehouse,
 } from "lucide-react";
+import { signOutAction } from "@/lib/actions/auth";
 import type { CurrentUser } from "@/lib/dal/auth";
 import type { NavIcon } from "@/lib/permissions";
 import { getRoleDescription, getRoleLabel, hasPermission, type NavItem } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+
+const SIDEBAR_COLLAPSE_STORAGE_KEY = "dashboard:sidebar-collapsed";
+const SIDEBAR_COLLAPSE_EVENT = "dashboard:sidebar-collapse-change";
+
+function readCollapsedPreference() {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function subscribeCollapsedPreference(onStoreChange: () => void) {
+  const handleChange = () => {
+    onStoreChange();
+  };
+
+  window.addEventListener("storage", handleChange);
+  window.addEventListener(SIDEBAR_COLLAPSE_EVENT, handleChange as EventListener);
+
+  return () => {
+    window.removeEventListener("storage", handleChange);
+    window.removeEventListener(SIDEBAR_COLLAPSE_EVENT, handleChange as EventListener);
+  };
+}
 
 const iconMap: Record<NavIcon, typeof LayoutDashboard> = {
   dashboard: LayoutDashboard,
@@ -44,36 +75,91 @@ type DashboardSidebarProps = {
 
 export function DashboardSidebar({ navItems, user }: DashboardSidebarProps) {
   const pathname = usePathname();
+  const isCollapsed = useSyncExternalStore(
+    subscribeCollapsedPreference,
+    readCollapsedPreference,
+    () => false
+  );
   const sections = Array.from(new Set(navItems.map((item) => item.section)));
+  const roleLabel = getRoleLabel(user.role);
+
+  function toggleCollapsed() {
+    const next = !isCollapsed;
+
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, next ? "1" : "0");
+      window.dispatchEvent(new Event(SIDEBAR_COLLAPSE_EVENT));
+    } catch {}
+  }
 
   return (
-    <aside className="hidden bg-slate-950 text-slate-100 lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-72 lg:flex-col lg:border-r lg:border-slate-800">
-      <div className="border-b border-slate-800 px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-          Northstar Inventory
-        </p>
-        <h1 className="mt-1.5 text-xl font-semibold text-white">Operations Core</h1>
+    <aside
+      className={cn(
+        "hidden bg-sidebar-background text-sidebar-foreground transition-[width] duration-200 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-sidebar-border",
+        isCollapsed ? "lg:w-20" : "lg:w-72"
+      )}
+    >
+      <div className={cn("pt-5 pb-4", isCollapsed ? "px-3" : "px-5")}>
+        <div className="flex items-start justify-between gap-2">
+          <div className={cn("min-w-0", isCollapsed && "flex-1")}>
+            <p
+              className={cn(
+                "tracking-label text-sidebar-label text-[10px]",
+                isCollapsed && "text-center"
+              )}
+            >
+              {isCollapsed ? "NI" : "Northstar Inventory"}
+            </p>
+            <h1
+              className={cn(
+                "mt-1 text-sm font-semibold text-sidebar-primary",
+                isCollapsed && "hidden"
+              )}
+            >
+              Operations Core
+            </h1>
+          </div>
+
+          <button
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="rounded-lg border border-sidebar-border p-1.5 text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-sidebar-primary"
+            onClick={toggleCollapsed}
+            type="button"
+          >
+            {isCollapsed ? (
+              <ChevronRight className="size-4" strokeWidth={2.4} />
+            ) : (
+              <ChevronLeft className="size-4" strokeWidth={2.4} />
+            )}
+          </button>
+        </div>
       </div>
 
       {hasPermission(user.role, "sales_orders", "create") ? (
-        <div className="hidden border-b border-slate-800 px-5 py-4 lg:block">
+        <div className={cn("hidden pb-4 lg:block", isCollapsed ? "px-2" : "px-4")}>
           <Link
             href="/dashboard/sales-orders/new"
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3 text-sm font-semibold text-slate-950 transition-all duration-200 hover:bg-slate-100 hover:shadow-md active:scale-[0.97]"
+            className={cn(
+              "flex h-10 w-full items-center justify-center rounded-lg border border-sidebar-border text-sidebar-primary text-sm font-medium transition-colors hover:bg-sidebar-accent",
+              isCollapsed ? "gap-0" : "gap-2"
+            )}
+            title="Record Sale"
           >
             <Plus className="size-4" strokeWidth={2.4} />
-            Record Sale
+            <span className={cn(isCollapsed && "hidden")}>Record Sale</span>
           </Link>
         </div>
       ) : null}
 
-      <div className="overflow-x-auto px-3 py-4 lg:flex-1 lg:overflow-y-auto">
+      <div className={cn("overflow-y-auto scrollbar-hide py-4 lg:flex-1", isCollapsed ? "px-2" : "px-3")}>
         <div className="flex gap-4 lg:block lg:space-y-6">
           {sections.map((section) => (
             <div key={section} className="min-w-[220px] lg:min-w-0">
-              <p className="px-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-                {section}
-              </p>
+              {isCollapsed ? null : (
+                <p className="tracking-label px-3 text-[10px] text-sidebar-label">
+                  {section}
+                </p>
+              )}
               <nav className="mt-3 space-y-1.5">
                 {navItems
                   .filter((item) => item.section === section)
@@ -89,14 +175,16 @@ export function DashboardSidebar({ navItems, user }: DashboardSidebarProps) {
                         key={item.href}
                         href={item.href}
                         className={cn(
-                          "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm transition-all duration-200",
+                          "flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                          isCollapsed ? "justify-center gap-0" : "gap-3",
                           isActive
-                            ? "bg-white text-slate-950 shadow-[0_18px_38px_-28px_rgba(15,23,42,0.7)]"
-                            : "text-slate-300 hover:bg-slate-800 hover:text-white active:scale-[0.98]"
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-primary"
                         )}
+                        title={item.title}
                       >
                         <Icon className="size-4" strokeWidth={2.2} />
-                        <span>{item.title}</span>
+                        <span className={cn(isCollapsed && "hidden")}>{item.title}</span>
                       </Link>
                     );
                   })}
@@ -106,15 +194,28 @@ export function DashboardSidebar({ navItems, user }: DashboardSidebarProps) {
         </div>
       </div>
 
-      <div className="border-t border-slate-800 px-5 py-5">
-        <p className="text-sm font-semibold text-white">
-          {user.firstName} {user.lastName}
+      <div className={cn("border-t border-sidebar-border py-5", isCollapsed ? "px-2" : "px-5")}>
+        <p className={cn("text-sm font-medium text-sidebar-primary", isCollapsed && "text-center")}>
+          {isCollapsed ? user.firstName[0] : `${user.firstName} ${user.lastName}`}
         </p>
-        <p className="mt-1 text-sm text-slate-400">{user.email}</p>
-        <p className="mt-3 text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-          {getRoleLabel(user.role)}
+        <p className={cn("mt-1 text-xs text-sidebar-muted", isCollapsed && "hidden")}>
+          {user.email}
         </p>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
+        <p className={cn("tracking-label mt-3 text-sidebar-label text-[10px]", isCollapsed && "text-center")}>
+          {isCollapsed ? roleLabel.slice(0, 3) : roleLabel}
+        </p>
+        <form action={signOutAction} className="mt-3">
+          <Button
+            className={cn("w-full", isCollapsed && "px-0")}
+            size="sm"
+            type="submit"
+            variant="outline"
+          >
+            <LogOut className="size-4" strokeWidth={2.2} />
+            <span className={cn("ml-2", isCollapsed && "hidden")}>Sign out</span>
+          </Button>
+        </form>
+        <p className={cn("mt-2 text-sm leading-6 text-sidebar-muted", isCollapsed && "hidden")}>
           {getRoleDescription(user.role)}
         </p>
       </div>

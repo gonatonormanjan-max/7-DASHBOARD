@@ -90,7 +90,7 @@ export function PurchaseOrderReceiveForm({
         </div>
       ) : null}
 
-      <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <div>
           <h2 className="text-lg font-semibold text-slate-950">Receive stock</h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">
@@ -103,7 +103,7 @@ export function PurchaseOrderReceiveForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Warehouse</span>
             <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               name="warehouseId"
               onChange={(event) => handleWarehouseChange(event.target.value)}
               value={warehouseId}
@@ -125,7 +125,7 @@ export function PurchaseOrderReceiveForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Notes</span>
             <textarea
-              className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               name="notes"
               onChange={(event) => setNotes(event.target.value)}
               placeholder="Optional receiving notes."
@@ -186,7 +186,7 @@ export function PurchaseOrderReceiveForm({
                     </td>
                     <td className="px-4 py-3">
                       <input
-                        className="w-28 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                        className="w-28 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                         max={remaining}
                         min={0}
                         name={`items[${index}].quantity`}

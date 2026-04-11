@@ -151,11 +151,11 @@ export function ProductForm({
         </div>
       ) : null}
 
-      <div className="grid gap-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] lg:grid-cols-2">
+      <div className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm lg:grid-cols-2">
         <label className="block space-y-2 lg:col-span-2">
           <span className="text-sm font-medium text-slate-700">Product name</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "name", product?.name)}
             name="name"
             placeholder="Northstar Handheld Scanner"
@@ -170,7 +170,7 @@ export function ProductForm({
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">SKU</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm uppercase tracking-[0.08em] text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm uppercase tracking-[0.08em] text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "sku", product?.sku)}
             name="sku"
             placeholder="NS-SCN-100"
@@ -185,7 +185,7 @@ export function ProductForm({
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Status</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(
               state,
               "status",
@@ -218,7 +218,7 @@ export function ProductForm({
             ) : null}
           </div>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             name="categoryId"
             onChange={(event) => setSelectedCategoryId(event.target.value)}
             required
@@ -246,7 +246,7 @@ export function ProductForm({
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Brand</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "brandId", product?.brandId)}
             name="brandId"
           >
@@ -296,7 +296,7 @@ export function ProductForm({
                     <label className="block space-y-2">
                       <span className="text-sm font-medium text-slate-700">Supplier</span>
                       <select
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                         onChange={(event) =>
                           updateSupplierRow(index, {
                             ...row,
@@ -319,7 +319,7 @@ export function ProductForm({
                     <label className="block space-y-2">
                       <span className="text-sm font-medium text-slate-700">Cost Price</span>
                       <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                         onChange={(event) =>
                           updateSupplierRow(index, {
                             ...row,
@@ -336,7 +336,7 @@ export function ProductForm({
                     <label className="block space-y-2">
                       <span className="text-sm font-medium text-slate-700">Lead Time (days)</span>
                       <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                         onChange={(event) =>
                           updateSupplierRow(index, {
                             ...row,
@@ -360,7 +360,7 @@ export function ProductForm({
                     </label>
 
                     <button
-                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition hover:bg-slate-50 focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-50 disabled:cursor-not-allowed pt-5"
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50 disabled:cursor-not-allowed pt-5"
                       onClick={() => removeSupplierRow(index)}
                       type="button"
                     >
@@ -369,7 +369,7 @@ export function ProductForm({
                   </div>
 
                   <textarea
-                    className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)] resize-none"
+                    className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30 resize-none"
                     onChange={(event) =>
                       updateSupplierRow(index, {
                         ...row,
@@ -413,7 +413,7 @@ export function ProductForm({
 
           {canAddSupplier ? (
             <button
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition hover:bg-slate-50 focus:ring-2 focus:ring-[var(--ring)]"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-ring/30"
               onClick={addSupplierRow}
               type="button"
             >
@@ -429,7 +429,7 @@ export function ProductForm({
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Unit Price</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "unitPrice", product?.unitPrice)}
             name="unitPrice"
             placeholder="0.00"
@@ -445,7 +445,7 @@ export function ProductForm({
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Cost Price</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "costPrice", product?.costPrice)}
             name="costPrice"
             placeholder="0.00"
@@ -461,7 +461,7 @@ export function ProductForm({
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Reorder Level</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "reorderLevel", product?.reorderLevel?.toString())}
             name="reorderLevel"
             placeholder="10"
@@ -476,7 +476,7 @@ export function ProductForm({
         <label className="block space-y-2 lg:col-span-2">
           <span className="text-sm font-medium text-slate-700">Image URL</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "imageUrl", product?.imageUrl)}
             name="imageUrl"
             placeholder="https://example.com/image.jpg"
@@ -490,7 +490,7 @@ export function ProductForm({
         <label className="block space-y-2 lg:col-span-2">
           <span className="text-sm font-medium text-slate-700">Description</span>
           <textarea
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] resize-none"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 resize-none"
             defaultValue={fieldValue(state, "description", product?.description)}
             name="description"
             placeholder="Product description..."
@@ -504,7 +504,7 @@ export function ProductForm({
 
       <div className="flex gap-3">
         <Link
-          className="rounded-2xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-medium text-slate-700 outline-none transition hover:bg-slate-50 focus:ring-2 focus:ring-[var(--ring)]"
+          className="rounded-2xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-medium text-slate-700 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-ring/30"
           href={mode === "create" ? "/dashboard/products" : `/dashboard/products/${product?.id}`}
         >
           Cancel

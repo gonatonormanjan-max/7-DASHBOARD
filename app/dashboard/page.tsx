@@ -12,7 +12,7 @@ const roleCopy = {
     eyebrow: "Welcome back",
     title: "Admin Dashboard",
     description:
-      "Full control across inventory, products, locations, orders, reports, users, and settings.",
+      "",
   },
   SYSTEM_MANAGER: {
     eyebrow: "Welcome back",
@@ -114,7 +114,7 @@ function DashboardStatLinkCard({
 
   return (
     <Link
-      className="block rounded-[24px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+      className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
       href={href}
     >
       {content}
@@ -227,7 +227,7 @@ export default async function DashboardPage() {
             .map((link) => (
               <Link
                 key={link.href}
-                className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+                className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
                 href={link.href}
               >
                 <h3 className="font-semibold text-slate-950">{link.title}</h3>

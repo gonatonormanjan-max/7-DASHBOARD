@@ -1,11 +1,17 @@
 "use server";
 
 import { randomInt } from "node:crypto";
-import { LocationType, PaymentMode, Prisma, ProductStatus, SalesOrderStatus } from "@prisma/client";
+import { LocationType, Prisma, ProductStatus, SalesOrderStatus } from "@prisma/client";
+import type { PaymentMode } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { ZodIssue } from "zod";
 import { logAudit } from "@/lib/audit";
+import {
+  applyInboundMovingAverage,
+  getSaleCostSnapshot,
+  syncLocationCostSnapshot,
+} from "@/lib/costing";
 import { requirePermission } from "@/lib/dal/auth";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
@@ -17,7 +23,7 @@ import {
 } from "@/lib/validators/sales-orders";
 
 type SalesOrderWorkflowActionState = {
-  status: "idle" | "error";
+  status: "idle" | "success" | "error";
   message?: string;
 };
 
@@ -29,6 +35,7 @@ type OrderMutationItem = {
   locationId: string;
   quantity: number;
   unitPrice: Prisma.Decimal;
+  unitCostAtSale: Prisma.Decimal;
   product: {
     name: string;
     sku: string;
@@ -53,6 +60,13 @@ type PreparedSalesOrderItem = {
   locationId: string;
   quantity: number;
   unitPrice: number;
+};
+
+type PreparedSalesOrderCostedItem = PreparedSalesOrderItem & {
+  unitCostAtSale: Prisma.Decimal;
+  lineCogs: Prisma.Decimal;
+  lineGrossProfit: Prisma.Decimal;
+  isEstimatedCost: boolean;
 };
 
 type PaymentResolution =
@@ -219,6 +233,11 @@ function parseIntent(rawIntent: string): "draft" | "record" | "record_and_new" {
   return rawIntent === "record" || rawIntent === "record_and_new" ? rawIntent : "draft";
 }
 
+function getWorkflowOrderId(formData: FormData) {
+  const value = formData.get("orderId");
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function normalizeCustomerName(customerMode: string, customerName: string, intent: string) {
   const trimmedCustomerName = customerName.trim();
 
@@ -278,7 +297,7 @@ function resolvePaymentDetails(input: {
 
   if (input.paymentMode === "CASH") {
     return {
-      paymentMode: PaymentMode.CASH,
+      paymentMode: "CASH",
       cashAmount: toMoney(input.orderTotal),
       onlineAmount: toMoney(0),
     };
@@ -286,7 +305,7 @@ function resolvePaymentDetails(input: {
 
   if (input.paymentMode === "ONLINE") {
     return {
-      paymentMode: PaymentMode.ONLINE,
+      paymentMode: "ONLINE",
       cashAmount: toMoney(0),
       onlineAmount: toMoney(input.orderTotal),
     };
@@ -326,7 +345,7 @@ function resolvePaymentDetails(input: {
   }
 
   return {
-    paymentMode: PaymentMode.MIXED,
+    paymentMode: "MIXED",
     cashAmount: toMoney(cashAmount ?? 0),
     onlineAmount: toMoney(onlineAmount ?? 0),
   };
@@ -398,6 +417,7 @@ async function loadOrderForStatusAction(orderId: string) {
           locationId: true,
           quantity: true,
           unitPrice: true,
+          unitCostAtSale: true,
           product: {
             select: {
               name: true,
@@ -817,6 +837,7 @@ export async function createSalesOrderAction(
       locationId: item.locationId,
       quantity: item.quantity,
       unitPrice: toMoney(item.unitPrice),
+      unitCostAtSale: toMoney(0),
       product: {
         name: product?.name ?? "Unknown product",
         sku: product?.sku ?? "UNKNOWN",
@@ -861,18 +882,79 @@ export async function createSalesOrderAction(
       createdById: user.id,
     });
 
+    const costSnapshotsByKey = new Map<
+      string,
+      Awaited<ReturnType<typeof getSaleCostSnapshot>>
+    >();
+    const costedItems: PreparedSalesOrderCostedItem[] = [];
+
+    for (const item of preparedItems) {
+      const key = `${item.productId}:${item.locationId}`;
+
+      if (!costSnapshotsByKey.has(key)) {
+        costSnapshotsByKey.set(
+          key,
+          await getSaleCostSnapshot(tx, {
+            productId: item.productId,
+            locationId: item.locationId,
+          })
+        );
+      }
+
+      const costSnapshot = costSnapshotsByKey.get(key)!;
+      const lineCogsValue = item.quantity * costSnapshot.unitCost.toNumber();
+      const lineRevenueValue = item.quantity * item.unitPrice;
+
+      costedItems.push({
+        ...item,
+        unitCostAtSale: costSnapshot.unitCost,
+        lineCogs: toMoney(lineCogsValue),
+        lineGrossProfit: toMoney(lineRevenueValue - lineCogsValue),
+        isEstimatedCost: costSnapshot.isEstimatedCost,
+      });
+    }
+
     await tx.salesOrderItem.createMany({
-      data: preparedItems.map((item) => ({
+      data: costedItems.map((item) => ({
         salesOrderId: createdOrder.id,
         productId: item.productId,
         locationId: item.locationId,
         quantity: item.quantity,
         unitPrice: toMoney(item.unitPrice),
+        unitCostAtSale: item.unitCostAtSale,
+        lineCogs: item.lineCogs,
+        lineGrossProfit: item.lineGrossProfit,
+        isEstimatedCost: item.isEstimatedCost,
       })),
     });
 
     if (intent !== "draft") {
-      for (const item of preparedItems) {
+      const uniqueStockPairs = Array.from(
+        new Map(
+          costedItems.map((item) => [
+            `${item.productId}:${item.locationId}`,
+            {
+              productId: item.productId,
+              locationId: item.locationId,
+            },
+          ])
+        ).values()
+      );
+      const stockRows = await tx.locationStock.findMany({
+        where: {
+          OR: uniqueStockPairs,
+        },
+        select: {
+          productId: true,
+          locationId: true,
+          quantity: true,
+        },
+      });
+      const onHandByKey = new Map(
+        stockRows.map((row) => [`${row.productId}:${row.locationId}`, row.quantity])
+      );
+
+      for (const item of costedItems) {
         await tx.inventoryMovement.create({
           data: {
             type: "SALES_FULFILLED",
@@ -897,6 +979,17 @@ export async function createSalesOrderAction(
             quantity: { decrement: item.quantity },
           },
         });
+
+        const key = `${item.productId}:${item.locationId}`;
+        const previousOnHand = onHandByKey.get(key) ?? 0;
+        const nextOnHand = previousOnHand - item.quantity;
+        onHandByKey.set(key, nextOnHand);
+
+        await syncLocationCostSnapshot(tx, {
+          locationId: item.locationId,
+          productId: item.productId,
+          onHandQtySnapshot: nextOnHand,
+        });
       }
     }
 
@@ -917,8 +1010,12 @@ export async function createSalesOrderAction(
           paymentMode: paymentDetails.paymentMode,
           cashAmount: paymentDetails.cashAmount?.toString() ?? null,
           onlineAmount: paymentDetails.onlineAmount?.toString() ?? null,
-          items: preparedItems.map((item) => ({
+          estimatedCostLineCount: costedItems.filter((item) => item.isEstimatedCost).length,
+          items: costedItems.map((item) => ({
             ...item,
+            unitCostAtSale: item.unitCostAtSale.toString(),
+            lineCogs: item.lineCogs.toString(),
+            lineGrossProfit: item.lineGrossProfit.toString(),
             productName: productsById.get(item.productId)?.name ?? null,
             sku: productsById.get(item.productId)?.sku ?? null,
             branchName: locationsById.get(item.locationId)?.name ?? null,
@@ -940,7 +1037,7 @@ export async function createSalesOrderAction(
   redirect(`/dashboard/sales-orders/${order.id}`);
 }
 
-export async function confirmSalesOrderAction(orderId: string) {
+async function runConfirmSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
 
   const order = await loadOrderForStatusAction(orderId);
@@ -1005,7 +1102,7 @@ export async function confirmSalesOrderAction(orderId: string) {
   return { status: "success" as const, message: `Order ${order.orderNumber} confirmed.` };
 }
 
-export async function deliverSalesOrderAction(orderId: string) {
+async function runDeliverSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
 
   const order = await loadOrderForStatusAction(orderId);
@@ -1036,6 +1133,31 @@ export async function deliverSalesOrderAction(orderId: string) {
       data: { status: "DELIVERED" },
     });
 
+    const uniqueStockPairs = Array.from(
+      new Map(
+        order.items.map((item) => [
+          `${item.productId}:${item.locationId}`,
+          {
+            productId: item.productId,
+            locationId: item.locationId,
+          },
+        ])
+      ).values()
+    );
+    const stockRows = await tx.locationStock.findMany({
+      where: {
+        OR: uniqueStockPairs,
+      },
+      select: {
+        productId: true,
+        locationId: true,
+        quantity: true,
+      },
+    });
+    const onHandByKey = new Map(
+      stockRows.map((row) => [`${row.productId}:${row.locationId}`, row.quantity])
+    );
+
     for (const item of order.items) {
       await tx.inventoryMovement.create({
         data: {
@@ -1062,6 +1184,17 @@ export async function deliverSalesOrderAction(orderId: string) {
           reservedQty: { decrement: item.quantity },
         },
       });
+
+      const key = `${item.productId}:${item.locationId}`;
+      const previousOnHand = onHandByKey.get(key) ?? 0;
+      const nextOnHand = previousOnHand - item.quantity;
+      onHandByKey.set(key, nextOnHand);
+
+      await syncLocationCostSnapshot(tx, {
+        locationId: item.locationId,
+        productId: item.productId,
+        onHandQtySnapshot: nextOnHand,
+      });
     }
 
     await logAudit(
@@ -1083,7 +1216,7 @@ export async function deliverSalesOrderAction(orderId: string) {
   return { status: "success" as const, message: `Order ${order.orderNumber} marked as delivered.` };
 }
 
-export async function completeSalesOrderAction(orderId: string) {
+async function runCompleteSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
 
   const order = await prisma.salesOrder.findUnique({
@@ -1121,7 +1254,7 @@ export async function completeSalesOrderAction(orderId: string) {
   return { status: "success" as const, message: `Order ${order.orderNumber} completed.` };
 }
 
-export async function cancelSalesOrderAction(orderId: string) {
+async function runCancelSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
 
   const order = await loadOrderForStatusAction(orderId);
@@ -1152,6 +1285,18 @@ export async function cancelSalesOrderAction(orderId: string) {
 
     if (wasDelivered) {
       for (const item of order.items) {
+        const stockBefore = await tx.locationStock.findUnique({
+          where: {
+            locationId_productId: {
+              locationId: item.locationId,
+              productId: item.productId,
+            },
+          },
+          select: {
+            quantity: true,
+          },
+        });
+
         await tx.inventoryMovement.create({
           data: {
             type: "CUSTOMER_RETURN",
@@ -1173,6 +1318,19 @@ export async function cancelSalesOrderAction(orderId: string) {
             },
           },
           data: { quantity: { increment: item.quantity } },
+        });
+
+        await applyInboundMovingAverage({
+          tx,
+          locationId: item.locationId,
+          productId: item.productId,
+          onHandBefore: stockBefore?.quantity ?? 0,
+          inboundQty: item.quantity,
+          inboundUnitCost: item.unitCostAtSale,
+          performedById: user.id,
+          sourceType: "customer_return",
+          sourceId: orderId,
+          reason: "Sales order cancellation return",
         });
       }
     }
@@ -1212,4 +1370,68 @@ export async function cancelSalesOrderAction(orderId: string) {
 
   revalidateSalesOrderPaths({ orderId, locationIds });
   return { status: "success" as const, message: `Order ${order.orderNumber} cancelled.` };
+}
+
+export async function confirmSalesOrderAction(
+  _prevState: SalesOrderWorkflowActionState,
+  formData: FormData
+): Promise<SalesOrderWorkflowActionState> {
+  const orderId = getWorkflowOrderId(formData);
+
+  if (!orderId) {
+    return {
+      status: "error",
+      message: "We could not identify this sales order. Refresh the page and try again.",
+    };
+  }
+
+  return runConfirmSalesOrderAction(orderId);
+}
+
+export async function deliverSalesOrderAction(
+  _prevState: SalesOrderWorkflowActionState,
+  formData: FormData
+): Promise<SalesOrderWorkflowActionState> {
+  const orderId = getWorkflowOrderId(formData);
+
+  if (!orderId) {
+    return {
+      status: "error",
+      message: "We could not identify this sales order. Refresh the page and try again.",
+    };
+  }
+
+  return runDeliverSalesOrderAction(orderId);
+}
+
+export async function completeSalesOrderAction(
+  _prevState: SalesOrderWorkflowActionState,
+  formData: FormData
+): Promise<SalesOrderWorkflowActionState> {
+  const orderId = getWorkflowOrderId(formData);
+
+  if (!orderId) {
+    return {
+      status: "error",
+      message: "We could not identify this sales order. Refresh the page and try again.",
+    };
+  }
+
+  return runCompleteSalesOrderAction(orderId);
+}
+
+export async function cancelSalesOrderAction(
+  _prevState: SalesOrderWorkflowActionState,
+  formData: FormData
+): Promise<SalesOrderWorkflowActionState> {
+  const orderId = getWorkflowOrderId(formData);
+
+  if (!orderId) {
+    return {
+      status: "error",
+      message: "We could not identify this sales order. Refresh the page and try again.",
+    };
+  }
+
+  return runCancelSalesOrderAction(orderId);
 }

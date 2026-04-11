@@ -131,7 +131,7 @@ export function DashboardTutorial({
               </button>
             </div>
 
-            <div className="mt-8 rounded-[24px] border border-slate-200 bg-slate-50/80 p-6">
+            <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50/80 p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
                 Step {stepIndex + 1} of {steps.length}
               </p>

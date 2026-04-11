@@ -57,22 +57,23 @@ enum MovementType {
 }
 
 model User {
-  id                 String              @id @default(uuid())
+  id                 String               @id @default(uuid())
   firstName          String
   lastName           String
-  email              String              @unique
+  email              String               @unique
   hashedPassword     String
-  role               Role                @default(SALES_STAFF)
-  isActive           Boolean             @default(true)
+  role               Role                 @default(SALES_STAFF)
+  isActive           Boolean              @default(true)
   assignedLocationId String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  assignedLocation   StockLocation?      @relation(fields: [assignedLocationId], references: [id], onDelete: SetNull)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  assignedLocation   StockLocation?       @relation(fields: [assignedLocationId], references: [id], onDelete: SetNull)
   accounts           Account[]
   purchaseOrders     PurchaseOrder[]
   salesOrders        SalesOrder[]
   inventoryMovements InventoryMovement[]
   auditLogs          AuditLog[]
+  productCostHistory ProductCostHistory[]
 }
 
 model Account {
@@ -143,23 +144,25 @@ model ProductSupplier {
 }
 
 model Product {
-  id            String              @id @default(uuid())
+  id            String                @id @default(uuid())
   name          String
-  sku           String              @unique
+  sku           String                @unique
   description   String?
-  unitPrice     Decimal             @db.Decimal(12, 2)
-  costPrice     Decimal             @db.Decimal(12, 2)
-  reorderLevel  Int                 @default(0)
+  unitPrice     Decimal               @db.Decimal(12, 2)
+  costPrice     Decimal               @db.Decimal(12, 2)
+  reorderLevel  Int                   @default(0)
   imageUrl      String?
-  status        ProductStatus       @default(ACTIVE)
+  status        ProductStatus         @default(ACTIVE)
   categoryId    String
   brandId       String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  category      Category            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  brand         Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  category      Category              @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand         Brand?                @relation(fields: [brandId], references: [id], onDelete: SetNull)
   suppliers     ProductSupplier[]
   locationStock LocationStock[]
+  locationCosts LocationProductCost[]
+  costHistory   ProductCostHistory[]
   purchaseItems PurchaseOrderItem[]
   salesItems    SalesOrderItem[]
   movements     InventoryMovement[]
@@ -171,18 +174,20 @@ model Product {
 }
 
 model StockLocation {
-  id            String              @id @default(uuid())
-  name          String              @unique
-  code          String              @unique
+  id            String                @id @default(uuid())
+  name          String                @unique
+  code          String                @unique
   type          LocationType
   address       String?
   managerName   String?
   contactNumber String?
-  isActive      Boolean             @default(true)
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  isActive      Boolean               @default(true)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
   assignedUsers User[]
   stock         LocationStock[]
+  productCosts  LocationProductCost[]
+  costHistory   ProductCostHistory[]
   salesItems    SalesOrderItem[]
   movements     InventoryMovement[]
 }
@@ -199,6 +204,44 @@ model LocationStock {
 
   @@unique([locationId, productId])
   @@index([productId])
+}
+
+model LocationProductCost {
+  id                  String        @id @default(uuid())
+  locationId          String
+  productId           String
+  avgUnitCost         Decimal       @db.Decimal(12, 2)
+  lastInboundUnitCost Decimal?      @db.Decimal(12, 2)
+  onHandQtySnapshot   Int           @default(0)
+  updatedAt           DateTime      @updatedAt
+  location            StockLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  product             Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, productId])
+  @@index([productId])
+}
+
+model ProductCostHistory {
+  id              String        @id @default(uuid())
+  locationId      String
+  productId       String
+  inboundQty      Int
+  inboundUnitCost Decimal       @db.Decimal(12, 2)
+  prevAvgUnitCost Decimal       @db.Decimal(12, 2)
+  newAvgUnitCost  Decimal       @db.Decimal(12, 2)
+  sourceType      String
+  sourceId        String?
+  changePct       Decimal?      @db.Decimal(7, 4)
+  reason          String?
+  changedById     String
+  createdAt       DateTime      @default(now())
+  location        StockLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  changedBy       User          @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([locationId, productId, createdAt])
+  @@index([productId, createdAt])
+  @@index([changedById, createdAt])
 }
 
 model PurchaseOrder {
@@ -260,17 +303,21 @@ model SalesOrder {
 }
 
 model SalesOrderItem {
-  id           String        @id @default(uuid())
-  salesOrderId String
-  productId    String
-  locationId   String
-  quantity     Int
-  unitPrice    Decimal       @db.Decimal(12, 2)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  salesOrder   SalesOrder    @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
-  product      Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
-  location     StockLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  id              String        @id @default(uuid())
+  salesOrderId    String
+  productId       String
+  locationId      String
+  quantity        Int
+  unitPrice       Decimal       @db.Decimal(12, 2)
+  unitCostAtSale  Decimal       @default(0) @db.Decimal(12, 2)
+  lineCogs        Decimal       @default(0) @db.Decimal(12, 2)
+  lineGrossProfit Decimal       @default(0) @db.Decimal(12, 2)
+  isEstimatedCost Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  salesOrder      SalesOrder    @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  location        StockLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
 
   @@index([productId])
   @@index([locationId])

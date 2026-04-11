@@ -120,11 +120,11 @@ export function SalesOrderForm({
         </div>
       ) : null}
 
-      <div className="grid gap-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] lg:grid-cols-2">
+      <div className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm lg:grid-cols-2">
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Branch</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
             disabled={!isReady}
             name="locationId"
             onChange={(event) => setLocationId(event.target.value)}
@@ -145,7 +145,7 @@ export function SalesOrderForm({
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Customer name</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             name="customerName"
             onChange={(event) => setCustomerName(event.target.value)}
             placeholder="Acme Retail"
@@ -161,7 +161,7 @@ export function SalesOrderForm({
         <label className="space-y-2 lg:col-span-2">
           <span className="text-sm font-medium text-slate-700">Customer email</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             name="customerEmail"
             onChange={(event) => setCustomerEmail(event.target.value)}
             placeholder="buyer@acme.com"
@@ -174,7 +174,7 @@ export function SalesOrderForm({
         </label>
       </div>
 
-      <section className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Line items</h2>
@@ -223,7 +223,7 @@ export function SalesOrderForm({
                     <label className="space-y-2">
                       <span className="text-sm font-medium text-slate-700">Product</span>
                       <select
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                         onChange={(event) => {
                           const nextProduct = products.find(
                             (product) => product.id === event.target.value
@@ -255,7 +255,7 @@ export function SalesOrderForm({
                     <label className="space-y-2">
                       <span className="text-sm font-medium text-slate-700">Quantity</span>
                       <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                         min="1"
                         onChange={(event) => {
                           setRows((current) =>
@@ -275,7 +275,7 @@ export function SalesOrderForm({
                     <label className="space-y-2">
                       <span className="text-sm font-medium text-slate-700">Unit price</span>
                       <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                         min="0"
                         onChange={(event) => {
                           setRows((current) =>
@@ -343,10 +343,10 @@ export function SalesOrderForm({
         </div>
       </section>
 
-      <label className="block space-y-2 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <label className="block space-y-2 rounded-lg border border-border bg-card p-6 shadow-sm">
         <span className="text-sm font-medium text-slate-700">Notes</span>
         <textarea
-          className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+          className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
           name="notes"
           onChange={(event) => setNotes(event.target.value)}
           placeholder="Delivery notes, payment reminders, or internal context."

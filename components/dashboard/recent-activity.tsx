@@ -57,7 +57,7 @@ function formatRelativeTime(date: Date) {
 
 export function RecentActivity({ movements }: RecentActivityProps) {
   return (
-    <section className="rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+    <section className="rounded-lg border border-border bg-card shadow-sm">
       <div className="border-b border-slate-200/80 px-6 py-5">
         <h2 className="text-lg font-semibold text-slate-950">Recent Activity</h2>
         <p className="mt-1 text-sm text-slate-500">

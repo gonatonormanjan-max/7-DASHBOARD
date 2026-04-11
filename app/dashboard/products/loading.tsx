@@ -11,13 +11,13 @@ export default function ProductsLoading() {
         {Array.from({ length: 4 }).map((_, index) => (
           <div
             key={index}
-            className="h-36 animate-pulse rounded-[24px] border border-white/70 bg-white/85"
+            className="h-36 animate-pulse rounded-lg border border-border bg-card"
           />
         ))}
       </div>
 
-      <div className="h-44 animate-pulse rounded-[24px] border border-white/70 bg-white/85" />
-      <div className="h-96 animate-pulse rounded-[24px] border border-white/70 bg-white/85" />
+      <div className="h-44 animate-pulse rounded-lg border border-border bg-card" />
+      <div className="h-96 animate-pulse rounded-lg border border-border bg-card" />
     </div>
   );
 }

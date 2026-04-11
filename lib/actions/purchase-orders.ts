@@ -4,6 +4,7 @@ import { LocationType, Prisma, ProductStatus, PurchaseOrderStatus } from "@prism
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logAudit } from "@/lib/audit";
+import { applyInboundMovingAverage } from "@/lib/costing";
 import { requirePermission } from "@/lib/dal/auth";
 import { withFlashMessage } from "@/lib/flash-toast";
 import { generatePurchaseOrderNumber } from "@/lib/purchase-orders";
@@ -534,6 +535,17 @@ export async function receivePurchaseOrderAction(
   await prisma.$transaction(async (tx) => {
     for (const line of receiveLines) {
       const orderItem = orderItemsById.get(line.itemId)!;
+      const stockBefore = await tx.locationStock.findUnique({
+        where: {
+          locationId_productId: {
+            locationId: warehouse.id,
+            productId: orderItem.productId,
+          },
+        },
+        select: {
+          quantity: true,
+        },
+      });
 
       await tx.purchaseOrderItem.update({
         where: { id: orderItem.id },
@@ -573,6 +585,19 @@ export async function receivePurchaseOrderAction(
           performedById: user.id,
         },
       });
+
+      await applyInboundMovingAverage({
+        tx,
+        locationId: warehouse.id,
+        productId: orderItem.productId,
+        onHandBefore: stockBefore?.quantity ?? 0,
+        inboundQty: line.quantity,
+        inboundUnitCost: orderItem.unitCost,
+        performedById: user.id,
+        sourceType: "purchase_order",
+        sourceId: order.id,
+        reason: "PO receive",
+      });
     }
 
     const refreshedItems = order.items.map((item) => {
@@ -611,6 +636,7 @@ export async function receivePurchaseOrderAction(
               productName: orderItem.product.name,
               sku: orderItem.product.sku,
               quantityReceived: line.quantity,
+              unitCost: orderItem.unitCost.toString(),
             };
           }),
         },

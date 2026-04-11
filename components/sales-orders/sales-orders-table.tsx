@@ -39,7 +39,7 @@ export function SalesOrdersTable({
 }: SalesOrdersTableProps) {
   if (orders.length === 0) {
     return (
-      <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/65 px-6 py-16 text-center">
+      <div className="rounded-lg border border-dashed border-slate-300 bg-card px-6 py-16 text-center">
         <h2 className="text-lg font-semibold text-slate-900">
           {hasFilters ? "No matching sales found" : "No sales recorded yet"}
         </h2>
@@ -53,10 +53,10 @@ export function SalesOrdersTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50/70">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted">
             <tr className="text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               <th className="px-5 py-4">Order</th>
               <th className="px-5 py-4">Customer</th>
@@ -68,7 +68,7 @@ export function SalesOrdersTable({
               <th className="px-5 py-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 bg-white">
+          <tbody className="divide-y divide-border bg-card">
             {orders.map((order) => (
               <tr key={order.id} className="align-top">
                 <td className="px-5 py-4">

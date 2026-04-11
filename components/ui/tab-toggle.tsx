@@ -13,16 +13,16 @@ type TabToggleProps = {
 
 export function TabToggle({ tabs }: TabToggleProps) {
   return (
-    <div className="inline-flex gap-1 rounded-2xl bg-slate-100 p-1">
+    <div className="inline-flex gap-1 rounded-lg bg-muted p-1">
       {tabs.map((tab) => (
         <Link
           key={tab.href}
           aria-current={tab.active ? "page" : undefined}
           className={cn(
-            "inline-flex items-center rounded-2xl px-4 py-2.5 text-sm font-semibold transition",
+            "inline-flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
             tab.active
-              ? "bg-primary text-primary-foreground"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           )}
           href={tab.href}
         >

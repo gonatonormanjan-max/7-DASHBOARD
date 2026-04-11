@@ -81,7 +81,7 @@ export function ProductsTable({
 }: ProductsTableProps) {
   if (products.length === 0) {
     return (
-      <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/65 px-6 py-16 text-center">
+      <div className="rounded-lg border border-dashed border-slate-300 bg-card px-6 py-16 text-center">
         <h2 className="text-lg font-semibold text-slate-900">No products found</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">
           Try adjusting your filters or create a new product to start building the shared catalog.
@@ -91,10 +91,10 @@ export function ProductsTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50/70">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted">
             <tr className="text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               <th className="px-5 py-4">
                 <SortHeader
@@ -148,7 +148,7 @@ export function ProductsTable({
               <th className="px-5 py-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 bg-white">
+          <tbody className="divide-y divide-border bg-card">
             {products.map((product) => {
               const archiveAction = archiveProductAction.bind(null, product.id, returnTo);
               const deactivateAction = deactivateProductAction.bind(null, product.id, returnTo);
@@ -209,10 +209,10 @@ export function ProductsTable({
                           ) : null}
 
                           <details className="relative inline-block">
-                            <summary className="cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition select-none hover:bg-slate-50">
+                            <summary className="cursor-pointer list-none rounded-2xl border border-slate-200 bg-card px-3 py-2 text-sm font-semibold text-slate-600 transition select-none hover:bg-slate-50">
                               ...
                             </summary>
-                            <div className="absolute right-0 z-10 mt-1 w-44 rounded-2xl border border-slate-200 bg-white py-1 shadow-lg">
+                            <div className="absolute right-0 z-10 mt-1 w-44 rounded-2xl border border-slate-200 bg-card py-1 shadow-lg">
                               {product.status === "ACTIVE" ? (
                                 <form action={deactivateAction}>
                                   <ConfirmSubmitButton

@@ -44,6 +44,7 @@ export default async function ReceiveInventoryPage() {
         id: true,
         name: true,
         sku: true,
+        costPrice: true,
       },
       orderBy: {
         name: "asc",
@@ -53,6 +54,7 @@ export default async function ReceiveInventoryPage() {
       select: {
         supplierId: true,
         productId: true,
+        costPrice: true,
       },
     }),
   ]);
@@ -67,8 +69,14 @@ export default async function ReceiveInventoryPage() {
 
       <SupplierReceiptForm
         action={supplierReceiptAction}
-        allProducts={allProducts}
-        supplierProductLinks={supplierProductLinks}
+        allProducts={allProducts.map((product) => ({
+          ...product,
+          costPrice: product.costPrice.toString(),
+        }))}
+        supplierProductLinks={supplierProductLinks.map((link) => ({
+          ...link,
+          costPrice: link.costPrice.toString(),
+        }))}
         suppliers={suppliers}
         warehouses={warehouses}
       />

@@ -80,7 +80,7 @@ export default async function LocationDetailPage({ params }: LocationDetailPageP
         }
       />
 
-      <section className="space-y-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <section className="space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <span
             className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${getTypeBadgeClass(location.type)}`}
@@ -169,7 +169,7 @@ export default async function LocationDetailPage({ params }: LocationDetailPageP
         </div>
 
         {location.stock.length > 0 ? (
-          <div className="overflow-hidden rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50/70">
@@ -235,7 +235,7 @@ export default async function LocationDetailPage({ params }: LocationDetailPageP
             </div>
           </div>
         ) : (
-          <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/65 px-6 py-12 text-center">
+          <div className="rounded-lg border border-dashed border-slate-300 bg-card px-6 py-12 text-center">
             <h2 className="text-lg font-semibold text-slate-900">No stock rows yet</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               This location has not recorded any inventory rows yet.
@@ -253,7 +253,7 @@ export default async function LocationDetailPage({ params }: LocationDetailPageP
         </div>
 
         {location.movements.length > 0 ? (
-          <div className="overflow-hidden rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50/70">
@@ -312,7 +312,7 @@ export default async function LocationDetailPage({ params }: LocationDetailPageP
             </div>
           </div>
         ) : (
-          <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/65 px-6 py-12 text-center">
+          <div className="rounded-lg border border-dashed border-slate-300 bg-card px-6 py-12 text-center">
             <h2 className="text-lg font-semibold text-slate-900">No movement records yet</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               Inventory activity at this location will appear here once adjustments, transfers, or

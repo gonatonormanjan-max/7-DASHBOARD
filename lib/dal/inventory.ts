@@ -321,7 +321,7 @@ export async function getInventoryLandingData() {
         locationId: true,
         quantity: true,
         reservedQty: true,
-        product: { select: { reorderLevel: true } },
+        product: { select: { id: true, reorderLevel: true } },
       },
     }),
   ]);

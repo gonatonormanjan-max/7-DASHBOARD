@@ -46,7 +46,7 @@ export default async function SupplierDetailPage({
       />
 
       <section className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <div className="space-y-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span
               className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
@@ -96,7 +96,7 @@ export default async function SupplierDetailPage({
         </div>
 
         <aside className="space-y-6">
-          <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Supplier timeline</h2>
             <div className="mt-4 space-y-4">
               <DetailField
@@ -117,7 +117,7 @@ export default async function SupplierDetailPage({
           </div>
 
           {canUpdate ? (
-            <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+            <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-950">Actions</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 {supplier.isActive
@@ -137,7 +137,7 @@ export default async function SupplierDetailPage({
       </section>
 
       {supplier.purchaseOrders.length > 0 ? (
-        <section className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Recent purchase orders</h2>
           <p className="mt-1 text-sm text-slate-500">
             Last {supplier.purchaseOrders.length} order

@@ -52,10 +52,10 @@ function PaginationLink({
   children: React.ReactNode;
 }) {
   const className = cn(
-    "inline-flex min-w-10 items-center justify-center rounded-2xl border px-4 py-2.5 text-sm font-semibold transition",
+    "inline-flex min-w-10 items-center justify-center rounded-md border px-3 py-2 text-sm font-medium transition-colors",
     isActive
       ? "border-primary bg-primary text-primary-foreground"
-      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
+      : "border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground",
     isDisabled && "pointer-events-none opacity-50"
   );
 
@@ -94,8 +94,8 @@ export function Pagination({
   });
 
   return (
-    <div className="flex flex-col gap-4 rounded-[24px] border border-white/70 bg-white/85 p-5 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm text-slate-500">
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-muted-foreground">
         Showing {pagination.from}-{pagination.to} of {pagination.totalCount} {itemLabel}
       </p>
 
@@ -111,7 +111,7 @@ export function Pagination({
           item === "ellipsis" ? (
             <span
               key={`ellipsis-${index}`}
-              className="inline-flex min-w-10 items-center justify-center px-2 text-sm font-semibold text-slate-400"
+              className="inline-flex min-w-10 items-center justify-center px-2 text-sm font-medium text-muted-foreground"
             >
               ...
             </span>

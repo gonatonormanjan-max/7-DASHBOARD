@@ -8,13 +8,10 @@ import {
   type Role,
 } from "@prisma/client";
 import { getInventoryLandingData } from "@/lib/dal/inventory";
+import { REPORT_INCLUDED_SALES_STATUSES } from "@/lib/dal/reports";
 import { prisma } from "@/lib/prisma";
 
-const revenueSalesOrderStatuses = [
-  SalesOrderStatus.CONFIRMED,
-  SalesOrderStatus.DELIVERED,
-  SalesOrderStatus.COMPLETED,
-] as const;
+const revenueSalesOrderStatuses = REPORT_INCLUDED_SALES_STATUSES;
 
 const dashboardVisibleProductStatuses = [
   ProductStatus.ACTIVE,

@@ -1,11 +1,21 @@
 import "server-only";
 
-import type { MovementType } from "@prisma/client";
+import { Prisma, type MovementType, type SalesOrderStatus } from "@prisma/client";
+import {
+  COST_SHOCK_ESCALATION_THRESHOLD,
+  COST_SHOCK_WARNING_THRESHOLD,
+  MOVING_AVERAGE_VALUATION_METHOD,
+} from "@/lib/costing";
 import { prisma } from "@/lib/prisma";
 
 export const REPORT_OVERVIEW_WINDOW_DAYS = 30;
 export const DEFAULT_ANALYTICS_WINDOW_DAYS = 90;
 export const DEFAULT_QUOTA_WINDOW_DAYS = 30;
+export const REPORT_INCLUDED_SALES_STATUSES: SalesOrderStatus[] = [
+  "CONFIRMED",
+  "DELIVERED",
+  "COMPLETED",
+];
 
 export type SalesTrendPoint = {
   date: string;
@@ -83,20 +93,51 @@ export type QuotaTrackerRow = {
   reached: boolean | null;
 };
 
+export type ReportConfidence = "high" | "medium" | "low";
+
+export type ReportMetricContext = {
+  valuationMethod: string;
+  includedStatuses: SalesOrderStatus[];
+  archivedOrdersPolicy: "included" | "excluded";
+  costShockWarningThresholdPct: number;
+  costShockEscalationThresholdPct: number;
+  totalSalesLines: number;
+  estimatedCostLineCount: number;
+  costShockEventsInWindow: number;
+  costShockEscalationsInWindow: number;
+  confidence: ReportConfidence;
+  recalculatedAt: string;
+};
+
+export type FinancialSummary = {
+  totalRevenue: number;
+  totalCogs: number;
+  totalGrossProfit: number;
+  grossMarginPct: number | null;
+  totalUnitsSold: number;
+  totalSalesLines: number;
+  estimatedCostLineCount: number;
+};
+
 export type ReportsOverviewData = {
   salesTrend: SalesTrendPoint[];
   summary: {
     totalRevenue: number;
+    totalCogs: number;
+    totalGrossProfit: number;
+    grossMarginPct: number | null;
     totalUnitsSold: number;
     highestDay: SalesTrendPoint | null;
     lowestDay: SalesTrendPoint | null;
     noSalesDays: number;
   };
+  metricContext: ReportMetricContext;
 };
 
 export type ReportsAnalyticsData = {
   analyticsDays: number;
   salesTrend: SalesTrendPoint[];
+  financialSummary: FinancialSummary;
   revenueByCategory: RevenueByCategoryRow[];
   topProducts: TopProductRow[];
   inventoryHealth: InventoryHealthRow[];
@@ -110,6 +151,7 @@ export type ReportsAnalyticsData = {
   revenueByBranch: BranchSeries;
   branchComparison: BranchComparisonRow[];
   seasonalTrends: BranchSeries;
+  metricContext: ReportMetricContext;
 };
 
 export type ReportsQuotaData = {
@@ -168,6 +210,33 @@ function getMaxValue(values: Iterable<number>) {
   return highest;
 }
 
+function getSalesStatusWhere() {
+  return {
+    in: REPORT_INCLUDED_SALES_STATUSES,
+  } as const;
+}
+
+function getReportConfidence(input: {
+  totalSalesLines: number;
+  estimatedCostLineCount: number;
+}): ReportConfidence {
+  if (input.totalSalesLines <= 0) {
+    return "high";
+  }
+
+  const estimatedRatio = input.estimatedCostLineCount / input.totalSalesLines;
+
+  if (estimatedRatio === 0) {
+    return "high";
+  }
+
+  if (estimatedRatio <= 0.1) {
+    return "medium";
+  }
+
+  return "low";
+}
+
 async function getSalesTrendData(
   days: number = REPORT_OVERVIEW_WINDOW_DAYS
 ): Promise<SalesTrendPoint[]> {
@@ -176,7 +245,7 @@ async function getSalesTrendData(
   const orders = await prisma.salesOrder.findMany({
     where: {
       createdAt: { gte: since },
-      status: { not: "CANCELLED" },
+      status: getSalesStatusWhere(),
     },
     select: {
       totalAmount: true,
@@ -214,7 +283,7 @@ async function getSalesItemAnalytics(days?: number) {
   const items = await prisma.salesOrderItem.findMany({
     where: {
       salesOrder: {
-        status: { not: "CANCELLED" },
+        status: getSalesStatusWhere(),
         ...(since ? { createdAt: { gte: since } } : {}),
       },
     },
@@ -275,6 +344,112 @@ async function getSalesItemAnalytics(days?: number) {
     }));
 
   return { revenueByCategory, topProducts };
+}
+
+async function getFinancialSummary(days: number): Promise<FinancialSummary> {
+  const since = getWindowStart(days);
+
+  const salesItems = await prisma.salesOrderItem.findMany({
+    where: {
+      salesOrder: {
+        createdAt: { gte: since },
+        status: getSalesStatusWhere(),
+      },
+    },
+    select: {
+      quantity: true,
+      unitPrice: true,
+      lineCogs: true,
+      lineGrossProfit: true,
+      isEstimatedCost: true,
+    },
+  });
+
+  let totalRevenue = 0;
+  let totalCogs = 0;
+  let totalGrossProfit = 0;
+  let totalUnitsSold = 0;
+  let estimatedCostLineCount = 0;
+
+  for (const item of salesItems) {
+    totalRevenue += item.quantity * item.unitPrice.toNumber();
+    totalCogs += item.lineCogs.toNumber();
+    totalGrossProfit += item.lineGrossProfit.toNumber();
+    totalUnitsSold += item.quantity;
+
+    if (item.isEstimatedCost) {
+      estimatedCostLineCount += 1;
+    }
+  }
+
+  return {
+    totalRevenue: roundCurrency(totalRevenue),
+    totalCogs: roundCurrency(totalCogs),
+    totalGrossProfit: roundCurrency(totalGrossProfit),
+    grossMarginPct: totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : null,
+    totalUnitsSold,
+    totalSalesLines: salesItems.length,
+    estimatedCostLineCount,
+  };
+}
+
+async function getCostShockSummary(days: number) {
+  const since = getWindowStart(days);
+  const warningThreshold = new Prisma.Decimal(COST_SHOCK_WARNING_THRESHOLD);
+  const escalationThreshold = new Prisma.Decimal(COST_SHOCK_ESCALATION_THRESHOLD);
+  const negativeWarningThreshold = new Prisma.Decimal(-COST_SHOCK_WARNING_THRESHOLD);
+  const negativeEscalationThreshold = new Prisma.Decimal(-COST_SHOCK_ESCALATION_THRESHOLD);
+
+  const [warningCount, escalationCount] = await Promise.all([
+    prisma.productCostHistory.count({
+      where: {
+        createdAt: { gte: since },
+        OR: [
+          { changePct: { gte: warningThreshold } },
+          { changePct: { lte: negativeWarningThreshold } },
+        ],
+      },
+    }),
+    prisma.productCostHistory.count({
+      where: {
+        createdAt: { gte: since },
+        OR: [
+          { changePct: { gte: escalationThreshold } },
+          { changePct: { lte: negativeEscalationThreshold } },
+        ],
+      },
+    }),
+  ]);
+
+  return {
+    warningCount,
+    escalationCount,
+  };
+}
+
+function buildMetricContext(input: {
+  financialSummary: FinancialSummary;
+  costShockSummary: {
+    warningCount: number;
+    escalationCount: number;
+  };
+}): ReportMetricContext {
+  return {
+    valuationMethod: MOVING_AVERAGE_VALUATION_METHOD,
+    includedStatuses: REPORT_INCLUDED_SALES_STATUSES,
+    archivedOrdersPolicy: "included",
+    costShockWarningThresholdPct: COST_SHOCK_WARNING_THRESHOLD * 100,
+    costShockEscalationThresholdPct: COST_SHOCK_ESCALATION_THRESHOLD * 100,
+    totalSalesLines: input.financialSummary.totalSalesLines,
+    estimatedCostLineCount: input.financialSummary.estimatedCostLineCount,
+    costShockEventsInWindow: input.costShockSummary.warningCount,
+    costShockEscalationsInWindow: input.costShockSummary.escalationCount,
+    confidence: getReportConfidence({
+      totalSalesLines: input.financialSummary.totalSalesLines,
+      estimatedCostLineCount: input.financialSummary.estimatedCostLineCount,
+    }),
+    recalculatedAt: new Date().toISOString(),
+  };
 }
 
 async function getInventoryHealthSnapshot() {
@@ -482,7 +657,7 @@ async function getRevenueByBranchOverTime(days: number): Promise<BranchSeries> {
     where: {
       location: { type: "BRANCH" },
       salesOrder: {
-        status: { not: "CANCELLED" },
+        status: getSalesStatusWhere(),
         createdAt: { gte: since },
       },
     },
@@ -542,7 +717,7 @@ async function getBranchComparison(days?: number) {
     where: {
       location: { type: "BRANCH" },
       salesOrder: {
-        status: { not: "CANCELLED" },
+        status: getSalesStatusWhere(),
         ...(since ? { createdAt: { gte: since } } : {}),
       },
     },
@@ -628,7 +803,7 @@ async function getSeasonalTrends(): Promise<BranchSeries> {
     where: {
       location: { type: "BRANCH" },
       salesOrder: {
-        status: { not: "CANCELLED" },
+        status: getSalesStatusWhere(),
       },
     },
     select: {
@@ -681,11 +856,11 @@ async function getSeasonalTrends(): Promise<BranchSeries> {
 }
 
 export async function getReportsOverviewData(): Promise<ReportsOverviewData> {
-  const salesTrend = await getSalesTrendData(REPORT_OVERVIEW_WINDOW_DAYS);
-  const totalRevenue = roundCurrency(
-    salesTrend.reduce((sum, day) => sum + day.revenue, 0)
-  );
-  const totalUnitsSold = salesTrend.reduce((sum, day) => sum + day.unitsSold, 0);
+  const [salesTrend, financialSummary, costShockSummary] = await Promise.all([
+    getSalesTrendData(REPORT_OVERVIEW_WINDOW_DAYS),
+    getFinancialSummary(REPORT_OVERVIEW_WINDOW_DAYS),
+    getCostShockSummary(REPORT_OVERVIEW_WINDOW_DAYS),
+  ]);
 
   const highestDay = salesTrend
     .filter((day) => day.revenue > 0)
@@ -710,12 +885,19 @@ export async function getReportsOverviewData(): Promise<ReportsOverviewData> {
   return {
     salesTrend,
     summary: {
-      totalRevenue,
-      totalUnitsSold,
+      totalRevenue: financialSummary.totalRevenue,
+      totalCogs: financialSummary.totalCogs,
+      totalGrossProfit: financialSummary.totalGrossProfit,
+      grossMarginPct: financialSummary.grossMarginPct,
+      totalUnitsSold: financialSummary.totalUnitsSold,
       highestDay,
       lowestDay,
       noSalesDays: salesTrend.filter((day) => day.revenue === 0).length,
     },
+    metricContext: buildMetricContext({
+      financialSummary,
+      costShockSummary,
+    }),
   };
 }
 
@@ -725,6 +907,7 @@ export async function getReportsAnalyticsData(
   const analyticsDays = Math.max(1, Math.floor(days));
   const [
     salesTrend,
+    financialSummary,
     salesItemAnalytics,
     inventorySnapshot,
     movementTrends,
@@ -733,8 +916,10 @@ export async function getReportsAnalyticsData(
     revenueByBranch,
     branchComparison,
     seasonalTrends,
+    costShockSummary,
   ] = await Promise.all([
     getSalesTrendData(analyticsDays),
+    getFinancialSummary(analyticsDays),
     getSalesItemAnalytics(analyticsDays),
     getInventoryHealthSnapshot(),
     getStockMovementTrends(analyticsDays),
@@ -743,11 +928,13 @@ export async function getReportsAnalyticsData(
     getRevenueByBranchOverTime(analyticsDays),
     getBranchComparison(analyticsDays),
     getSeasonalTrends(),
+    getCostShockSummary(analyticsDays),
   ]);
 
   return {
     analyticsDays,
     salesTrend,
+    financialSummary,
     revenueByCategory: salesItemAnalytics.revenueByCategory,
     topProducts: salesItemAnalytics.topProducts,
     inventoryHealth: inventorySnapshot.rows,
@@ -761,6 +948,10 @@ export async function getReportsAnalyticsData(
     revenueByBranch,
     branchComparison,
     seasonalTrends,
+    metricContext: buildMetricContext({
+      financialSummary,
+      costShockSummary,
+    }),
   };
 }
 
@@ -796,7 +987,7 @@ export async function getReportsQuotaData({
       where: {
         location: { type: "BRANCH" },
         salesOrder: {
-          status: { not: "CANCELLED" },
+          status: getSalesStatusWhere(),
           createdAt: { gte: since },
         },
       },

@@ -276,7 +276,7 @@ export function ImportWizard({ initialCategories, initialBrands }: ImportWizardP
       </div>
 
       {/* Step content card */}
-      <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
         {/* Checking overlay */}
         {isChecking && (
           <div className="flex items-center justify-center py-16">

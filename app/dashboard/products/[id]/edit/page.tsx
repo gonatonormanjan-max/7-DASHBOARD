@@ -27,7 +27,12 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
   }
 
   if (product.status === "ARCHIVED") {
-    const restoreAction = restoreProductAction.bind(null, product.id, `/dashboard/products/${product.id}`);
+    const productId = product.id;
+
+    async function restoreAction(_: FormData) {
+      "use server";
+      await restoreProductAction(productId, `/dashboard/products/${productId}`);
+    }
 
     return (
       <div className="space-y-8">
@@ -37,7 +42,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
           description="Archived products are intentionally locked from editing. Restore the record first if you need to make changes."
         />
 
-        <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <ProductStatusBadge status={product.status} />
             <span className="text-sm text-slate-600">{product.sku}</span>
@@ -95,7 +100,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
           description: product.description ?? "",
           unitPrice: product.unitPrice.toString(),
           costPrice: product.costPrice.toString(),
-          reorderLevel: String(product.reorderLevel),
+          reorderLevel: product.reorderLevel,
           imageUrl: product.imageUrl ?? "",
           status: product.status as "ACTIVE" | "INACTIVE",
           categoryId: product.categoryId,

@@ -47,11 +47,11 @@ export function LocationForm({ action, mode, location }: LocationFormProps) {
         </div>
       ) : null}
 
-      <div className="grid gap-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] lg:grid-cols-2">
+      <div className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm lg:grid-cols-2">
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Location name</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "name", location?.name)}
             name="name"
             placeholder="Central Warehouse"
@@ -66,7 +66,7 @@ export function LocationForm({ action, mode, location }: LocationFormProps) {
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Code</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm uppercase text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm uppercase text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "code", location?.code)}
             name="code"
             placeholder="WH-001"
@@ -84,7 +84,7 @@ export function LocationForm({ action, mode, location }: LocationFormProps) {
             Location type
           </label>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "type", location?.type ?? "WAREHOUSE")}
             id="location-type"
             name="type"
@@ -107,7 +107,7 @@ export function LocationForm({ action, mode, location }: LocationFormProps) {
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Manager name</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "managerName", location?.managerName)}
             name="managerName"
             placeholder="Renz Alanano"
@@ -123,7 +123,7 @@ export function LocationForm({ action, mode, location }: LocationFormProps) {
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Contact number</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "contactNumber", location?.contactNumber)}
             name="contactNumber"
             placeholder="+63 917 000 0000"
@@ -139,7 +139,7 @@ export function LocationForm({ action, mode, location }: LocationFormProps) {
         <label className="block space-y-2 lg:col-span-2">
           <span className="text-sm font-medium text-slate-700">Address</span>
           <textarea
-            className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "address", location?.address)}
             name="address"
             placeholder="Optional physical address for deliveries, audits, and routing."

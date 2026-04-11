@@ -25,8 +25,18 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   }
 
   const canManage = hasPermission(user.role, "products", "update");
-  const archiveAction = archiveProductAction.bind(null, product.id, `/dashboard/products/${product.id}`);
-  const restoreAction = restoreProductAction.bind(null, product.id, `/dashboard/products/${product.id}`);
+  const productId = product.id;
+  const returnTo = `/dashboard/products/${productId}`;
+
+  async function archiveAction(_: FormData) {
+    "use server";
+    await archiveProductAction(productId, returnTo);
+  }
+
+  async function restoreAction(_: FormData) {
+    "use server";
+    await restoreProductAction(productId, returnTo);
+  }
 
   return (
     <div className="space-y-8">
@@ -70,7 +80,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
       />
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <ProductStatusBadge status={product.status} />
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
@@ -144,7 +154,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
           </div>
         </div>
 
-        <div className="space-y-4 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Activity</h2>
           <div className="space-y-2 text-sm text-slate-600">
             <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">

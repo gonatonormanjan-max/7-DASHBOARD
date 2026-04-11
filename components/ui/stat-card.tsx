@@ -8,10 +8,10 @@ type StatCardProps = {
 };
 
 const toneClasses = {
-  default: "from-white to-slate-50",
-  primary: "from-[#eff5fb] to-white",
-  success: "from-[#edf8f4] to-white",
-  warning: "from-[#fff7eb] to-white",
+  default: "border-t-info",
+  primary: "border-t-info",
+  success: "border-t-success",
+  warning: "border-t-warning",
 } as const;
 
 export function StatCard({
@@ -23,14 +23,14 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "rounded-[24px] border border-white/70 bg-gradient-to-br p-5 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]",
+        "rounded-lg border border-border border-t-2 bg-card p-5",
         toneClasses[tone]
       )}
     >
-      <p className="text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
+      <p className="tracking-label text-[11px] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-3xl font-bold text-foreground">{value}</p>
       {description ? (
-        <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
+        <p className="mt-2 text-xs text-muted-foreground">{description}</p>
       ) : null}
     </div>
   );

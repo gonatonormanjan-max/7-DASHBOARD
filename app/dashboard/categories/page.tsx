@@ -21,6 +21,14 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
   const canCreate = hasPermission(user.role, "categories", "create");
   const canManage = hasPermission(user.role, "categories", "update");
   const canDelete = hasPermission(user.role, "categories", "delete");
+  const returnParams = new URLSearchParams();
+
+  if (filters.query) returnParams.set("query", filters.query);
+  if (filters.sortBy !== "updatedAt") returnParams.set("sortBy", filters.sortBy);
+  if (filters.sortOrder !== "desc") returnParams.set("sortOrder", filters.sortOrder);
+
+  const returnQuery = returnParams.toString();
+  const returnTo = returnQuery ? `/dashboard/categories?${returnQuery}` : "/dashboard/categories";
 
   return (
     <div className="space-y-8">
@@ -74,12 +82,11 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
         <StatCard
           description="Products currently grouped by these categories."
           label="Products"
-          value={String(summary.totalProducts)}
+          value={String(summary.linkedProducts)}
         />
       </section>
 
       <CategoriesFilters
-        canManage={canManage}
         filters={filters}
       />
 
@@ -87,6 +94,7 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
         canDelete={canDelete}
         canManage={canManage}
         categories={categories}
+        returnTo={returnTo}
       />
     </div>
   );

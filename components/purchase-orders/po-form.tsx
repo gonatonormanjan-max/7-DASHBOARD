@@ -158,7 +158,7 @@ export function PurchaseOrderForm({
           </div>
         ) : null}
 
-        <div className="grid gap-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] lg:grid-cols-2">
+        <div className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm lg:grid-cols-2">
           {/* Supplier field with Quick Add button */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -172,7 +172,7 @@ export function PurchaseOrderForm({
               </button>
             </div>
             <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               name="supplierId"
               onChange={(event) => {
                 const nextSupplierId = event.target.value;
@@ -204,7 +204,7 @@ export function PurchaseOrderForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Warehouse</span>
             <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               name="locationId"
               onChange={(event) => setLocationId(event.target.value)}
               value={locationId}
@@ -224,7 +224,7 @@ export function PurchaseOrderForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Expected date</span>
             <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               name="expectedDate"
               onChange={(event) => setExpectedDate(event.target.value)}
               type="date"
@@ -238,7 +238,7 @@ export function PurchaseOrderForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Notes</span>
             <textarea
-              className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               name="notes"
               onChange={(event) => setNotes(event.target.value)}
               placeholder="Delivery window, supplier remarks, or receiving context."
@@ -250,7 +250,7 @@ export function PurchaseOrderForm({
           </label>
         </div>
 
-        <section className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-950">Line items</h2>
@@ -313,7 +313,7 @@ export function PurchaseOrderForm({
                         <span className="text-sm font-medium text-slate-700">Product</span>
                         {/* Searchable product picker */}
                         <input
-                          className="w-full rounded-t-2xl border border-b-0 border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-1 focus:ring-[var(--ring)]"
+                          className="w-full rounded-t-2xl border border-b-0 border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-1 focus-visible:ring-ring/30"
                           onChange={(e) =>
                             setProductSearch((prev) => ({
                               ...prev,
@@ -329,7 +329,7 @@ export function PurchaseOrderForm({
                           value={search}
                         />
                         <select
-                          className="w-full rounded-b-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                          className="w-full rounded-b-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                           onChange={(event) => {
                             const nextProductId = event.target.value;
                             setProductSearch((prev) => ({ ...prev, [row.id]: "" }));
@@ -365,7 +365,7 @@ export function PurchaseOrderForm({
                       <label className="space-y-2">
                         <span className="text-sm font-medium text-slate-700">Quantity</span>
                         <input
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                           min="1"
                           onChange={(event) => {
                             setRows((current) =>
@@ -385,7 +385,7 @@ export function PurchaseOrderForm({
                       <label className="space-y-2">
                         <span className="text-sm font-medium text-slate-700">Unit cost</span>
                         <input
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                           min="0"
                           onChange={(event) => {
                             setRows((current) =>
@@ -481,7 +481,7 @@ export function PurchaseOrderForm({
           onClick={() => setIsSupplierModalOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-[24px] border border-white/70 bg-white p-6 shadow-2xl"
+            className="w-full max-w-md rounded-lg border border-border bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-5 flex items-start justify-between">
@@ -514,7 +514,7 @@ export function PurchaseOrderForm({
                 </span>
                 <input
                   autoFocus
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                   defaultValue={inlineSupplierState.values?.name ?? ""}
                   name="name"
                   placeholder="e.g. Metro Supplies Corp."
@@ -530,7 +530,7 @@ export function PurchaseOrderForm({
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-700">Contact name</span>
                 <input
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                   defaultValue={inlineSupplierState.values?.contactName ?? ""}
                   name="contactName"
                   placeholder="Primary contact person"
@@ -541,7 +541,7 @@ export function PurchaseOrderForm({
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-700">Email</span>
                 <input
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                   defaultValue={inlineSupplierState.values?.email ?? ""}
                   name="email"
                   placeholder="supplier@example.com"

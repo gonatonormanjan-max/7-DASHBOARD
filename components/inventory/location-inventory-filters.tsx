@@ -27,7 +27,7 @@ export function LocationInventoryFilters({
   return (
     <form
       action={actionPath}
-      className="rounded-[24px] border border-white/70 bg-white/85 p-5 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]"
+      className="rounded-lg border border-border bg-card p-5 shadow-sm"
       method="get"
     >
       <input name="tab" type="hidden" value={tab} />
@@ -48,7 +48,7 @@ export function LocationInventoryFilters({
         <label className="space-y-2 xl:col-span-2">
           <span className="text-sm font-medium text-slate-700">Search product</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.query}
             name="query"
             placeholder="Search by product name or SKU"
@@ -59,7 +59,7 @@ export function LocationInventoryFilters({
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Category</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.categoryId ?? ""}
             name="categoryId"
           >
@@ -75,7 +75,7 @@ export function LocationInventoryFilters({
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Brand</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.brandId ?? ""}
             name="brandId"
           >
@@ -93,7 +93,7 @@ export function LocationInventoryFilters({
             <label className="space-y-2">
               <span className="text-sm font-medium text-slate-700">Movement type</span>
               <select
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                 defaultValue={filters.movementType}
                 name="movementType"
               >
@@ -112,7 +112,7 @@ export function LocationInventoryFilters({
             <label className="space-y-2">
               <span className="text-sm font-medium text-slate-700">From date</span>
               <input
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                 defaultValue={filters.dateFrom ?? ""}
                 name="dateFrom"
                 type="date"
@@ -122,7 +122,7 @@ export function LocationInventoryFilters({
             <label className="space-y-2">
               <span className="text-sm font-medium text-slate-700">To date</span>
               <input
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                 defaultValue={filters.dateTo ?? ""}
                 name="dateTo"
                 type="date"

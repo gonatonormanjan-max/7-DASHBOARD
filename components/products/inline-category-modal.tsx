@@ -37,7 +37,7 @@ export function InlineCategoryModal({
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-          <div className="w-full max-w-lg rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_40px_80px_-40px_rgba(15,23,42,0.45)]">
+          <div className="w-full max-w-lg rounded-[28px] border border-border bg-white p-6 shadow-[0_40px_80px_-40px_rgba(15,23,42,0.45)]">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
@@ -68,7 +68,7 @@ export function InlineCategoryModal({
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-700">Category name</span>
                 <input
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                   defaultValue={state.values?.name ?? ""}
                   name="name"
                   placeholder="Finished Goods"
@@ -83,7 +83,7 @@ export function InlineCategoryModal({
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-slate-700">Description</span>
                 <textarea
-                  className="min-h-24 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                  className="min-h-24 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                   defaultValue={state.values?.description ?? ""}
                   name="description"
                   placeholder="Optional context for filtering and organization."

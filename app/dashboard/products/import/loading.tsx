@@ -22,7 +22,7 @@ export default function ImportLoading() {
       </div>
 
       {/* Wizard card skeleton */}
-      <div className="animate-pulse rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="animate-pulse rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="space-y-4">
           <div className="h-24 rounded-[20px] bg-slate-100" />
           <div className="h-48 rounded-[20px] bg-slate-100" />

@@ -9,7 +9,7 @@ type InventoryLowStockTabProps = {
 export function InventoryLowStockTab({ lowStockRows }: InventoryLowStockTabProps) {
   if (lowStockRows.length === 0) {
     return (
-      <div className="rounded-[24px] border border-[#c5e7db] bg-[#edf8f4] px-6 py-12">
+      <div className="rounded-lg border border-[#c5e7db] bg-[#edf8f4] px-6 py-12">
         <h2 className="text-lg font-semibold text-slate-950">No low-stock alerts</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
           Every visible stock row is currently above its reorder level.
@@ -19,7 +19,7 @@ export function InventoryLowStockTab({ lowStockRows }: InventoryLowStockTabProps
   }
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50/70">

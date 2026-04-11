@@ -66,11 +66,11 @@ export function UserForm({
         </div>
       ) : null}
 
-      <div className="grid gap-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)] lg:grid-cols-2">
+      <div className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm lg:grid-cols-2">
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">First name</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "firstName", user?.firstName)}
             name="firstName"
             placeholder="Norman"
@@ -85,7 +85,7 @@ export function UserForm({
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Last name</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "lastName", user?.lastName)}
             name="lastName"
             placeholder="Jan"
@@ -100,7 +100,7 @@ export function UserForm({
         <label className="block space-y-2 lg:col-span-2">
           <span className="text-sm font-medium text-slate-700">Email address</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "email", user?.email)}
             name="email"
             placeholder="lead@northstar.local"
@@ -116,7 +116,7 @@ export function UserForm({
           <span className="text-sm font-medium text-slate-700">Access level</span>
           {isSelf && user ? <input name="role" type="hidden" value={user.role} /> : null}
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
             defaultValue={fieldValue(state, "role", user?.role ?? roleOptions[0]?.value)}
             disabled={isSelf}
             name="role"
@@ -144,7 +144,7 @@ export function UserForm({
             <input name="isActive" type="hidden" value={String(user.isActive)} />
           ) : null}
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
             defaultValue={fieldValue(
               state,
               "isActive",
@@ -171,7 +171,7 @@ export function UserForm({
             {mode === "create" ? "Password" : "New password"}
           </span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             name="password"
             placeholder={mode === "create" ? "At least 8 characters" : "Leave blank to keep current password"}
             required={mode === "create"}
@@ -187,7 +187,7 @@ export function UserForm({
             {mode === "create" ? "Confirm password" : "Confirm new password"}
           </span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             name="confirmPassword"
             placeholder="Repeat the password"
             required={mode === "create"}
@@ -204,7 +204,7 @@ export function UserForm({
           <label className="block space-y-2 lg:col-span-2">
             <span className="text-sm font-medium text-slate-700">Assigned location</span>
             <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={fieldValue(state, "assignedLocationId", user?.assignedLocationId ?? "")}
               name="assignedLocationId"
             >

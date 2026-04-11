@@ -48,7 +48,7 @@ export default async function SalesOrdersArchivePage({
         }
       />
 
-      <section className="rounded-[24px] border border-white/70 bg-white/85 p-5 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <div className="grid grid-cols-2 gap-3 lg:flex lg:items-center lg:gap-0">
           <div className="lg:border-r lg:border-slate-200 lg:pr-5 lg:mr-5">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Archived</p>
@@ -78,14 +78,14 @@ export default async function SalesOrdersArchivePage({
           className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]"
         >
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={query}
             name="query"
             placeholder="Search order, customer, or SKU"
             type="search"
           />
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={windowFilter}
             name="window"
           >

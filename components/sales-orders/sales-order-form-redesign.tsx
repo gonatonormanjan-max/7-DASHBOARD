@@ -261,7 +261,7 @@ function ProductSearchCombobox({
           product.sku.toLowerCase().includes(normalizedQuery)
         );
       })
-    : products;
+    : [];
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -287,12 +287,11 @@ function ProductSearchCombobox({
     setQuery("");
     setOpen(false);
     setHighlightIndex(-1);
-    window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
-      setOpen(true);
+      setOpen(Boolean(query.trim()));
       event.preventDefault();
       return;
     }
@@ -329,14 +328,14 @@ function ProductSearchCombobox({
     <div ref={wrapperRef} className="relative">
       <input
         ref={inputRef}
-        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
         disabled={disabled}
         onChange={(event) => {
           setQuery(event.target.value);
           setHighlightIndex(-1);
-          setOpen(true);
+          setOpen(Boolean(event.target.value.trim()));
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => setOpen(Boolean(query.trim()))}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         type="text"
@@ -403,7 +402,7 @@ function QuantityStepper({
         -
       </button>
       <input
-        className="w-16 border-x border-slate-200 px-2 py-2 text-center text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[var(--ring)]"
+        className="w-16 border-x border-slate-200 px-2 py-2 text-center text-sm text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
         disabled={disabled}
         min={1}
         onChange={(event) => onChange(Math.max(1, Number(event.target.value) || 1))}
@@ -491,6 +490,10 @@ export function SalesOrderFormRedesign({
   const nextIdRef = useRef(initialCart.length + 1);
   const [cart, setCart] = useState<SaleLineItem[]>(initialCart);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const addItemButtonRef = useRef<HTMLButtonElement>(null);
+  const [isAddingItem, setIsAddingItem] = useState(
+    initialCart.length === 0 && Boolean(initialWarehouseId)
+  );
 
   const isReady = products.length > 0 && locations.length > 0;
   const stockMap = new Map(
@@ -500,6 +503,22 @@ export function SalesOrderFormRedesign({
 
   function focusAddItemInput() {
     window.setTimeout(() => addItemInputRef.current?.focus(), 0);
+  }
+
+  function focusAddItemButton() {
+    window.setTimeout(() => addItemButtonRef.current?.focus(), 0);
+  }
+
+  function openAddItemMode() {
+    if (!isReady || !saleWarehouseId) return;
+
+    setIsAddingItem(true);
+    focusAddItemInput();
+  }
+
+  function closeAddItemMode() {
+    setIsAddingItem(false);
+    focusAddItemButton();
   }
 
   function setCartWithMerge(updater: (current: SaleLineItem[]) => SaleLineItem[]) {
@@ -536,11 +555,18 @@ export function SalesOrderFormRedesign({
         warehouseOverridden: false,
       },
     ]);
+    setIsAddingItem(false);
+    focusAddItemButton();
   }
 
   function removeItem(localId: string) {
-    setCart((current) => current.filter((item) => item.localId !== localId));
-    focusAddItemInput();
+    const nextCart = cart.filter((item) => item.localId !== localId);
+    setCart(nextCart);
+
+    if (nextCart.length === 0 && isReady && saleWarehouseId) {
+      setIsAddingItem(true);
+      focusAddItemInput();
+    }
   }
 
   function updateQuantity(localId: string, quantity: number) {
@@ -617,6 +643,14 @@ export function SalesOrderFormRedesign({
 
   function updateSaleWarehouse(warehouseId: string) {
     setSaleWarehouseId(warehouseId);
+
+    if (!warehouseId) {
+      setIsAddingItem(false);
+    } else if (cart.length === 0) {
+      setIsAddingItem(true);
+      focusAddItemInput();
+    }
+
     setCart((current) =>
       mergeCartItems(
         current.map((item) =>
@@ -696,7 +730,7 @@ export function SalesOrderFormRedesign({
         </div>
       ) : null}
 
-      <section className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
           Sale context
         </p>
@@ -744,7 +778,7 @@ export function SalesOrderFormRedesign({
             <label className="space-y-2 lg:w-56">
               <span className="text-sm font-medium text-slate-700">Selling from</span>
               <select
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                 onChange={(event) => updateSaleWarehouse(event.target.value)}
                 value={saleWarehouseId}
               >
@@ -762,7 +796,7 @@ export function SalesOrderFormRedesign({
             <div className="space-y-2 lg:w-56">
               <span className="text-sm font-medium text-slate-700">Customer</span>
               <input
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                 name="customerName"
                 onChange={(event) => setCustomerName(event.target.value)}
                 placeholder="Optional for drafts, or use walk-in sale"
@@ -782,7 +816,7 @@ export function SalesOrderFormRedesign({
             <label className="space-y-2 lg:w-56">
               <span className="text-sm font-medium text-slate-700">Email</span>
               <input
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                 defaultValue={prefill?.customerEmail || fieldValue(state, "customerEmail", "")}
                 name="customerEmail"
                 placeholder="Optional"
@@ -800,7 +834,7 @@ export function SalesOrderFormRedesign({
             Add notes
           </summary>
           <textarea
-            className="mt-3 min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+            className="mt-3 min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={prefill?.notes || fieldValue(state, "notes", "")}
             name="notes"
             placeholder="Optional cashier note, delivery detail, or internal instruction."
@@ -811,7 +845,7 @@ export function SalesOrderFormRedesign({
         </details>
       </section>
 
-      <section className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
@@ -830,18 +864,37 @@ export function SalesOrderFormRedesign({
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
-            <ProductSearchCombobox
-              disabled={!isReady || !saleWarehouseId}
-              inputRef={addItemInputRef}
-              onSelect={addProductToCart}
-              placeholder={
-                saleWarehouseId
-                  ? "Type product name or SKU to add to cart"
-                  : "Select a sale warehouse before building the cart"
-              }
-              products={products}
-            />
+          <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-500">
+                Add items one at a time to keep the cart view clean and focused.
+              </p>
+              <Button
+                ref={addItemButtonRef}
+                type="button"
+                disabled={!isReady || !saleWarehouseId}
+                onClick={isAddingItem ? closeAddItemMode : openAddItemMode}
+                variant={isAddingItem ? "outline" : "default"}
+              >
+                {isAddingItem ? "Done adding" : cart.length === 0 ? "Add first item" : "Add item"}
+              </Button>
+            </div>
+
+            {isAddingItem ? (
+              <div className="mt-3">
+                <ProductSearchCombobox
+                  disabled={!isReady || !saleWarehouseId}
+                  inputRef={addItemInputRef}
+                  onSelect={addProductToCart}
+                  placeholder="Search product name or SKU"
+                  products={products}
+                />
+              </div>
+            ) : (
+              <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
+                Click <span className="font-medium text-slate-700">Add item</span> to search the catalog.
+              </div>
+            )}
 
             {!isReady ? (
               <p className="mt-3 text-sm text-slate-500">
@@ -861,8 +914,8 @@ export function SalesOrderFormRedesign({
           </div>
 
           {cart.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/70 px-6 py-8 text-center">
-              <p className="text-sm text-slate-500">Search or scan to add the first cart item.</p>
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white/70 px-6 py-8 text-center">
+              <p className="text-sm text-slate-500">Click Add first item to start building this cart.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -1043,7 +1096,7 @@ export function SalesOrderFormRedesign({
                           <label className="flex items-center gap-3">
                             <span className="text-xs font-medium text-slate-500">Custom price</span>
                             <input
-                              className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                              className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                               min={0}
                               onChange={(event) =>
                                 updateUnitPrice(item.localId, event.target.value)
@@ -1059,7 +1112,7 @@ export function SalesOrderFormRedesign({
                           <label className="flex items-center gap-3">
                             <span className="text-xs font-medium text-slate-500">Location</span>
                             <select
-                              className="w-56 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                              className="w-56 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                               onChange={(event) => updateWarehouse(item.localId, event.target.value)}
                               value={item.warehouseId}
                             >
@@ -1099,7 +1152,7 @@ export function SalesOrderFormRedesign({
         </div>
       </section>
 
-      <section className="mt-2 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <section className="mt-2 rounded-lg border border-border bg-card p-6 shadow-sm">
         {inReview ? (
           /* ── CASHIER: Review & confirm panel ── */
           <div className="space-y-5">
@@ -1194,7 +1247,7 @@ export function SalesOrderFormRedesign({
                   <label className="space-y-2">
                     <span className="text-sm font-medium text-slate-700">Cash amount</span>
                     <input
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                       min={0}
                       onChange={(event) => setCashAmount(event.target.value)}
                       step="0.01"
@@ -1209,7 +1262,7 @@ export function SalesOrderFormRedesign({
                   <label className="space-y-2">
                     <span className="text-sm font-medium text-slate-700">Online amount</span>
                     <input
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
                       min={0}
                       onChange={(event) => setOnlineAmount(event.target.value)}
                       step="0.01"

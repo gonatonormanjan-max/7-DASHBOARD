@@ -44,7 +44,7 @@ export function SupplierForm({
         </div>
       ) : null}
 
-      <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <h2 className="text-base font-semibold text-slate-950">Supplier details</h2>
         <p className="mt-1 text-sm text-slate-500">
           Basic contact information used when creating purchase orders.
@@ -56,7 +56,7 @@ export function SupplierForm({
               Supplier name <span className="text-destructive">*</span>
             </span>
             <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={state.values?.name ?? defaultValues?.name ?? ""}
               name="name"
               placeholder="e.g. Metro Supplies Corp."
@@ -70,7 +70,7 @@ export function SupplierForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Contact name</span>
             <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={
                 state.values?.contactName ?? defaultValues?.contactName ?? ""
               }
@@ -88,7 +88,7 @@ export function SupplierForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Email</span>
             <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={state.values?.email ?? defaultValues?.email ?? ""}
               name="email"
               placeholder="supplier@example.com"
@@ -102,7 +102,7 @@ export function SupplierForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Phone</span>
             <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={state.values?.phone ?? defaultValues?.phone ?? ""}
               name="phone"
               placeholder="+63 900 000 0000"
@@ -116,7 +116,7 @@ export function SupplierForm({
           <label className="space-y-2 lg:col-span-2">
             <span className="text-sm font-medium text-slate-700">Address</span>
             <textarea
-              className="min-h-[90px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="min-h-[90px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={state.values?.address ?? defaultValues?.address ?? ""}
               name="address"
               placeholder="Street, city, province"
@@ -128,7 +128,7 @@ export function SupplierForm({
         </div>
       </div>
 
-      <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <h2 className="text-base font-semibold text-slate-950">Status</h2>
         <p className="mt-1 text-sm text-slate-500">
           Inactive suppliers are hidden from purchase order creation.

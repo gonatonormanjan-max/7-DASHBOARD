@@ -24,7 +24,7 @@ export function TopProductsChart({ data }: TopProductsChartProps) {
     return (
       <ChartCard
         title="Top Products by Revenue"
-        description="Highest-earning products across all completed sales."
+        description="Highest-earning products across posted sales (confirmed, delivered, completed)."
       >
         <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 text-sm text-slate-500">
           No product sales recorded yet.
@@ -41,7 +41,7 @@ export function TopProductsChart({ data }: TopProductsChartProps) {
   return (
     <ChartCard
       title="Top Products by Revenue"
-      description="Highest-earning products across all completed sales."
+      description="Highest-earning products across posted sales (confirmed, delivered, completed)."
     >
       <ResponsiveContainer width="100%" height={Math.max(320, data.length * 44)}>
         <BarChart

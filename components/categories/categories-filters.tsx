@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { CategoryListFilters } from "@/lib/validators/categories";
+import { Button } from "@/components/ui/button";
 
 type CategoriesFiltersProps = {
   filters: CategoryListFilters;
@@ -8,14 +9,14 @@ type CategoriesFiltersProps = {
 export function CategoriesFilters({ filters }: CategoriesFiltersProps) {
   return (
     <form
-      className="rounded-[24px] border border-white/70 bg-white/85 p-5 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]"
+      className="rounded-lg border border-border bg-card p-5 shadow-sm"
       method="get"
     >
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr_1fr]">
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Search</span>
+          <span className="text-sm font-medium text-foreground">Search</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.query}
             name="query"
             placeholder="Search by category name or description"
@@ -24,9 +25,9 @@ export function CategoriesFilters({ filters }: CategoriesFiltersProps) {
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Sort by</span>
+          <span className="text-sm font-medium text-foreground">Sort by</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.sortBy}
             name="sortBy"
           >
@@ -38,9 +39,9 @@ export function CategoriesFilters({ filters }: CategoriesFiltersProps) {
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Order</span>
+          <span className="text-sm font-medium text-foreground">Order</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.sortOrder}
             name="sortOrder"
           >
@@ -50,23 +51,17 @@ export function CategoriesFilters({ filters }: CategoriesFiltersProps) {
         </label>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-500">
+      <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
           Categories organize the shared catalog and should stay clean before supplier and order flows expand.
         </p>
         <div className="flex items-center gap-3">
-          <Link
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-            href="/dashboard/categories"
-          >
-            Clear
+          <Link href="/dashboard/categories">
+            <Button type="button" variant="outline">
+              Clear
+            </Button>
           </Link>
-          <button
-            className="rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-[#16304f]"
-            type="submit"
-          >
-            Apply filters
-          </button>
+          <Button type="submit">Apply filters</Button>
         </div>
       </div>
     </form>

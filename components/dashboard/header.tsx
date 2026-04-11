@@ -7,16 +7,16 @@ import { Button } from "@/components/ui/button";
 
 export function DashboardHeader({ user }: { user: CurrentUser }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-white/70 bg-[rgba(244,247,251,0.88)] px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+    <header className="sticky top-0 z-20 border-b border-border bg-card">
+      <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+        <div className="min-w-0">
+          <p className="tracking-label text-[10px] text-muted-foreground">
             Internal control center
           </p>
-          <h2 className="mt-1 text-2xl font-semibold text-slate-950">
+          <h2 className="text-lg font-semibold text-foreground leading-tight">
             Welcome back, {user.firstName}
           </h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Monitor inventory, coordinate stock movements, and keep operations aligned.
           </p>
         </div>
@@ -26,17 +26,17 @@ export function DashboardHeader({ user }: { user: CurrentUser }) {
 
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.35)]"
+            className="inline-flex items-center gap-2 rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           >
             <Search className="size-4" />
             Global search coming next
           </button>
 
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.35)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+          <div className="rounded-lg border border-border bg-background px-4 py-2">
+            <p className="tracking-label text-[10px] text-muted-foreground">
               {getRoleLabel(user.role)}
             </p>
-            <p className="mt-1 text-sm text-slate-600">{user.email}</p>
+            <p className="mt-1 text-sm text-foreground">{user.email}</p>
           </div>
 
           <form

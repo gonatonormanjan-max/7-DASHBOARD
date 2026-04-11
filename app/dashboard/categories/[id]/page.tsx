@@ -57,7 +57,7 @@ export default async function CategoryDetailPage({ params }: CategoryDetailPageP
       />
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="grid gap-4 sm:grid-cols-2">
             <DetailField label="Category name" value={category.name} />
             <DetailField label="Linked products" value={String(category._count.products)} />
@@ -77,7 +77,7 @@ export default async function CategoryDetailPage({ params }: CategoryDetailPageP
         </div>
 
         <aside className="space-y-6">
-          <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Recent linked products</h2>
             <div className="mt-4 space-y-3">
               {category.products.length > 0 ? (
@@ -99,7 +99,7 @@ export default async function CategoryDetailPage({ params }: CategoryDetailPageP
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Record activity</h2>
             <div className="mt-4 space-y-4">
               <DetailField

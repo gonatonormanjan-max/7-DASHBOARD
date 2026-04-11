@@ -58,7 +58,7 @@ export default async function SuppliersPage({
         />
       </section>
 
-      <section className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Find suppliers</h2>
@@ -81,7 +81,7 @@ export default async function SuppliersPage({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Search</span>
             <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={filters.query}
               name="query"
               placeholder="Name, contact, or email"
@@ -92,7 +92,7 @@ export default async function SuppliersPage({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Status</span>
             <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={filters.status}
               name="status"
             >

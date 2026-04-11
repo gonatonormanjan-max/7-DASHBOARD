@@ -53,7 +53,7 @@ export default async function SalesOrderDetailPage({
       />
 
       <section className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <div className="space-y-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <SalesOrderStatusBadge status={order.status} />
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
@@ -130,7 +130,7 @@ export default async function SalesOrderDetailPage({
         </div>
 
         <aside className="space-y-6">
-          <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Workflow actions</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Move this order through its next valid status. Stock is reduced only when the
@@ -155,7 +155,7 @@ export default async function SalesOrderDetailPage({
             ) : null}
           </div>
 
-          <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Order timeline</h2>
             <div className="mt-4 space-y-4">
               <DetailField

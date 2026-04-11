@@ -146,7 +146,7 @@ export function StepPaste({ initialText, onParsed }: StepPasteProps) {
           Paste your spreadsheet data
         </label>
         <textarea
-          className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-5 text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+          className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-xs leading-5 text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
           rows={14}
           placeholder={`name\tsku\tcategory\tunitPrice\tcostPrice\nProduct One\tPROD-001\tBeverages\t120.00\t80.00\nProduct Two\tPROD-002\tSnacks\t45.00\t28.00`}
           value={text}

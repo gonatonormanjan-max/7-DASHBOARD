@@ -11,6 +11,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 type SupplierReceiptLine = {
   productId: string;
   quantity: string;
+  unitCost: string;
 };
 
 type SupplierReceiptFormProps = {
@@ -31,10 +32,12 @@ type SupplierReceiptFormProps = {
     id: string;
     name: string;
     sku: string;
+    costPrice: string;
   }>;
   supplierProductLinks: Array<{
     supplierId: string;
     productId: string;
+    costPrice: string;
   }>;
 };
 
@@ -42,13 +45,14 @@ function createEmptyLine(): SupplierReceiptLine {
   return {
     productId: "",
     quantity: "1",
+    unitCost: "0.00",
   };
 }
 
 function itemFieldError(
   state: SupplierReceiptState,
   index: number,
-  field: "productId" | "quantity"
+  field: "productId" | "quantity" | "unitCost"
 ) {
   return state.fieldErrors?.[`items.${index}.${field}`]?.[0];
 }
@@ -68,7 +72,13 @@ export function SupplierReceiptForm({
   );
   const [notes, setNotes] = useState(state.values?.notes ?? "");
   const [items, setItems] = useState<SupplierReceiptLine[]>(
-    state.values?.items.length ? state.values.items : [createEmptyLine()]
+    state.values?.items.length
+      ? state.values.items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          unitCost: item.unitCost || "0.00",
+        }))
+      : [createEmptyLine()]
   );
   const isReady = suppliers.length > 0 && warehouses.length > 0 && allProducts.length > 0;
   const linkedProductIds = new Set(
@@ -89,6 +99,14 @@ export function SupplierReceiptForm({
     setItems((currentItems) =>
       currentItems.map((item, itemIndex) => (itemIndex === index ? nextLine : item))
     );
+  }
+
+  function getUnitCostForProduct(productId: string, selectedSupplierId: string) {
+    const supplierLink = supplierProductLinks.find(
+      (link) => link.supplierId === selectedSupplierId && link.productId === productId
+    );
+    const product = allProducts.find((entry) => entry.id === productId);
+    return supplierLink?.costPrice ?? product?.costPrice ?? "0.00";
   }
 
   function addLine() {
@@ -120,7 +138,7 @@ export function SupplierReceiptForm({
         </div>
       ) : null}
 
-      <div className="space-y-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm">
         <div>
           <h2 className="text-lg font-semibold text-slate-950">Supplier receipt</h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">
@@ -133,7 +151,7 @@ export function SupplierReceiptForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Supplier</span>
             <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
               disabled={!isReady}
               name="supplierId"
               onChange={(event) => {
@@ -148,8 +166,13 @@ export function SupplierReceiptForm({
                 setItems((currentItems) => {
                   const nextItems = currentItems.map((item) =>
                     item.productId && !nextLinkedProductIds.has(item.productId)
-                      ? { ...item, productId: "" }
-                      : item
+                      ? { ...item, productId: "", unitCost: "0.00" }
+                      : item.productId
+                        ? {
+                            ...item,
+                            unitCost: getUnitCostForProduct(item.productId, nextSupplierId),
+                          }
+                        : item
                   );
 
                   return nextItems.length > 0 ? nextItems : [createEmptyLine()];
@@ -177,7 +200,7 @@ export function SupplierReceiptForm({
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Warehouse</span>
             <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
               disabled={!isReady}
               name="locationId"
               onChange={(event) => setLocationId(event.target.value)}
@@ -199,7 +222,7 @@ export function SupplierReceiptForm({
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Reference number</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
             disabled={!isReady}
             name="referenceNumber"
             onChange={(event) => setReferenceNumber(event.target.value)}
@@ -249,17 +272,20 @@ export function SupplierReceiptForm({
                   key={`receipt-line-${index}`}
                   className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
                 >
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.7fr)_auto]">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_auto]">
                     <label className="space-y-2">
                       <span className="text-sm font-medium text-slate-700">Product</span>
                       <select
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
                         disabled={!isReady || supplierId.length === 0}
                         name={`items[${index}].productId`}
                         onChange={(event) =>
                           updateLine(index, {
                             ...item,
                             productId: event.target.value,
+                            unitCost: event.target.value
+                              ? getUnitCostForProduct(event.target.value, supplierId)
+                              : "0.00",
                           })
                         }
                         value={item.productId}
@@ -281,7 +307,7 @@ export function SupplierReceiptForm({
                     <label className="space-y-2">
                       <span className="text-sm font-medium text-slate-700">Quantity</span>
                       <input
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
                         disabled={!isReady}
                         min={1}
                         name={`items[${index}].quantity`}
@@ -298,6 +324,31 @@ export function SupplierReceiptForm({
                       {itemFieldError(state, index, "quantity") ? (
                         <p className="text-sm text-destructive">
                           {itemFieldError(state, index, "quantity")}
+                        </p>
+                      ) : null}
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-slate-700">Unit cost</span>
+                      <input
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
+                        disabled={!isReady}
+                        min={0}
+                        name={`items[${index}].unitCost`}
+                        onChange={(event) =>
+                          updateLine(index, {
+                            ...item,
+                            unitCost: event.target.value,
+                          })
+                        }
+                        placeholder="0.00"
+                        step="0.01"
+                        type="number"
+                        value={item.unitCost}
+                      />
+                      {itemFieldError(state, index, "unitCost") ? (
+                        <p className="text-sm text-destructive">
+                          {itemFieldError(state, index, "unitCost")}
                         </p>
                       ) : null}
                     </label>
@@ -325,7 +376,7 @@ export function SupplierReceiptForm({
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-700">Notes</span>
           <textarea
-            className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+            className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60"
             disabled={!isReady}
             name="notes"
             onChange={(event) => setNotes(event.target.value)}

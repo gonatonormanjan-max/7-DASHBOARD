@@ -84,7 +84,7 @@ export default async function StockSetupPage({
             })}
           </div>
         ) : (
-          <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-8 text-center text-sm leading-6 text-slate-500">
+          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/80 px-6 py-8 text-center text-sm leading-6 text-slate-500">
             No active locations found. Create a warehouse or branch first.
           </div>
         )}
@@ -141,7 +141,7 @@ export default async function StockSetupPage({
           products={products}
         />
       ) : (
-        <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-8 text-center text-sm leading-6 text-slate-500">
+        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/80 px-6 py-8 text-center text-sm leading-6 text-slate-500">
           No active products found in the catalog. Add products before setting up
           stock.
         </div>

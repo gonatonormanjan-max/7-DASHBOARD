@@ -34,7 +34,7 @@ export function POMovementLedger({ movements }: POMovementLedgerProps) {
   if (movements.length === 0) return null;
 
   return (
-    <div className="rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+    <div className="rounded-lg border border-border bg-card shadow-sm">
       <button
         className="flex w-full items-center justify-between p-6 text-left"
         onClick={() => setIsOpen((prev) => !prev)}

@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ProductStatus } from "@prisma/client";
-import { adjustInventoryAction, transferInventoryAction } from "@/lib/actions/inventory";
 import { requirePermission } from "@/lib/dal/auth";
 import { getInventoryPageData } from "@/lib/dal/inventory";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
@@ -14,11 +12,9 @@ import {
   type InventoryStockSortField,
   type InventoryTab,
 } from "@/lib/validators/inventory";
-import { InventoryAdjustmentForm } from "@/components/inventory/inventory-adjustment-form";
 import { InventoryLowStockTab } from "@/components/inventory/inventory-low-stock-tab";
 import { InventoryMovementsTab } from "@/components/inventory/inventory-movements-tab";
 import { InventoryStockTab } from "@/components/inventory/inventory-stock-tab";
-import { InventoryTransferForm } from "@/components/inventory/inventory-transfer-form";
 import { LocationInventoryFilters } from "@/components/inventory/location-inventory-filters";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -100,47 +96,10 @@ export default async function LocationInventoryPage({
       ...currentState,
       ...overrides,
     });
-  const [inventoryData, manageOptions] = await Promise.all([
-    getInventoryPageData({
-      ...filters,
-      locationId,
-    }),
-    canManageHere
-      ? Promise.all([
-          prisma.product.findMany({
-            where: {
-              status: {
-                in: [ProductStatus.ACTIVE, ProductStatus.INACTIVE],
-              },
-            },
-            orderBy: {
-              name: "asc",
-            },
-            select: {
-              id: true,
-              name: true,
-              sku: true,
-            },
-          }),
-          prisma.stockLocation.findMany({
-            where: {
-              isActive: true,
-            },
-            orderBy: {
-              name: "asc",
-            },
-            select: {
-              id: true,
-              name: true,
-              code: true,
-            },
-          }),
-        ]).then(([products, locations]) => ({ products, locations }))
-      : Promise.resolve({
-          products: [] as Array<{ id: string; name: string; sku: string }>,
-          locations: [] as Array<{ id: string; name: string; code: string }>,
-        }),
-  ]);
+  const inventoryData = await getInventoryPageData({
+    ...filters,
+    locationId,
+  });
 
   function buildSortHref(field: InventoryStockSortField) {
     return buildHref({
@@ -168,6 +127,17 @@ export default async function LocationInventoryPage({
     sortOrder: "asc",
   });
   const currentHref = buildHref();
+  const manageRouteParams = new URLSearchParams({
+    returnTo: currentHref,
+  });
+
+  if (location?.id) {
+    manageRouteParams.set("locationId", location.id);
+    manageRouteParams.set("fromLocationId", location.id);
+  }
+
+  const adjustmentHref = `/dashboard/inventory/adjustment?${manageRouteParams.toString()}`;
+  const transferHref = `/dashboard/inventory/transfer?${manageRouteParams.toString()}`;
   const tabs = [
     {
       label: "Current Stock",
@@ -236,88 +206,79 @@ export default async function LocationInventoryPage({
         tab={tab}
       />
 
-      <section
-        className={
-          canManage ? "grid gap-6 xl:grid-cols-[1.45fr_0.85fr]" : "space-y-6"
-        }
-      >
-        <div className="space-y-6">
-          {tab === "stock" ? (
-            <InventoryStockTab
-              buildSortHref={buildSortHref}
-              sortBy={filters.sortBy}
-              sortOrder={filters.sortOrder}
-              stockRows={inventoryData.stockRows}
+      <section className="space-y-6">
+        {tab === "stock" ? (
+          <InventoryStockTab
+            buildSortHref={buildSortHref}
+            sortBy={filters.sortBy}
+            sortOrder={filters.sortOrder}
+            stockRows={inventoryData.stockRows}
+          />
+        ) : null}
+
+        {tab === "movements" ? (
+          <>
+            <InventoryMovementsTab
+              movements={inventoryData.movements}
+              showLocation={locationId === "system-wide"}
             />
-          ) : null}
 
-          {tab === "movements" ? (
-            <>
-              <InventoryMovementsTab
-                movements={inventoryData.movements}
-                showLocation={locationId === "system-wide"}
-              />
+            <Pagination
+              basePath={`/dashboard/inventory/${locationId}`}
+              itemLabel="movements"
+              pagination={inventoryData.movementPagination}
+              query={{
+                tab: "movements",
+                query: filters.query || undefined,
+                categoryId: filters.categoryId,
+                brandId: filters.brandId,
+                movementType:
+                  filters.movementType === "all" ? undefined : filters.movementType,
+                dateFrom: filters.dateFrom,
+                dateTo: filters.dateTo,
+                sortBy: filters.sortBy === "name" ? undefined : filters.sortBy,
+                sortOrder: filters.sortOrder === "asc" ? undefined : filters.sortOrder,
+                pageSize:
+                  filters.pageSize === DEFAULT_PAGE_SIZE
+                    ? undefined
+                    : filters.pageSize,
+              }}
+            />
+          </>
+        ) : null}
 
-              <Pagination
-                basePath={`/dashboard/inventory/${locationId}`}
-                itemLabel="movements"
-                pagination={inventoryData.movementPagination}
-                query={{
-                  tab: "movements",
-                  query: filters.query || undefined,
-                  categoryId: filters.categoryId,
-                  brandId: filters.brandId,
-                  movementType:
-                    filters.movementType === "all" ? undefined : filters.movementType,
-                  dateFrom: filters.dateFrom,
-                  dateTo: filters.dateTo,
-                  sortBy: filters.sortBy === "name" ? undefined : filters.sortBy,
-                  sortOrder: filters.sortOrder === "asc" ? undefined : filters.sortOrder,
-                  pageSize:
-                    filters.pageSize === DEFAULT_PAGE_SIZE
-                      ? undefined
-                      : filters.pageSize,
-                }}
-              />
-            </>
-          ) : null}
-
-          {tab === "low-stock" ? (
-            <InventoryLowStockTab lowStockRows={inventoryData.lowStockRows} />
-          ) : null}
-        </div>
+        {tab === "low-stock" ? (
+          <InventoryLowStockTab lowStockRows={inventoryData.lowStockRows} />
+        ) : null}
 
         {canManage ? (
-          <aside className="space-y-6">
-            {canManageHere ? (
-              <>
-                <InventoryAdjustmentForm
-                  action={adjustInventoryAction}
-                  initialLocationId={location?.id}
-                  locations={manageOptions.locations}
-                  products={manageOptions.products}
-                  returnTo={currentHref}
-                />
-                <InventoryTransferForm
-                  action={transferInventoryAction}
-                  initialFromLocationId={location?.id}
-                  locations={manageOptions.locations}
-                  products={manageOptions.products}
-                  returnTo={currentHref}
-                />
-              </>
-            ) : (
-              <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
-                <h2 className="text-lg font-semibold text-slate-950">
-                  Inventory changes disabled
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  This location is inactive. Reactivate it from the Locations module before
-                  recording adjustments or transfers here.
-                </p>
+          canManageHere ? (
+            <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-950">Inventory operations</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Manual adjustment and stock transfer are now available as dedicated inventory
+                pages for a cleaner workflow.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link href={adjustmentHref}>
+                  <Button variant="outline">Open Manual Adjustment</Button>
+                </Link>
+                <Link href={transferHref}>
+                  <Button variant="outline">Open Stock Transfer</Button>
+                </Link>
               </div>
-            )}
-          </aside>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-950">
+                Inventory changes disabled
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                This location is inactive. Reactivate it from the Locations module before
+                recording adjustments or transfers.
+              </p>
+            </div>
+          )
         ) : null}
       </section>
     </div>

@@ -85,12 +85,12 @@ export function BulkStockSetupForm({
       ) : null}
 
       {/* Reason + Notes section */}
-      <div className="grid gap-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="grid gap-6 md:grid-cols-2">
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Reason</span>
             <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={state.values?.reason ?? ""}
               name="reason"
             >
@@ -113,7 +113,7 @@ export function BulkStockSetupForm({
               Notes <span className="text-slate-400">(optional)</span>
             </span>
             <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               defaultValue={state.values?.notes ?? ""}
               maxLength={500}
               name="notes"
@@ -129,7 +129,7 @@ export function BulkStockSetupForm({
       </div>
 
       {/* Product table */}
-      <div className="rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="rounded-lg border border-border bg-card shadow-sm">
         {/* Search bar */}
         <div className="border-b border-slate-100 px-6 py-4">
           <div className="flex items-center gap-3">
@@ -139,7 +139,7 @@ export function BulkStockSetupForm({
                 strokeWidth={2.1}
               />
               <input
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by name, SKU, category, or brand..."
                 type="text"
@@ -239,7 +239,7 @@ export function BulkStockSetupForm({
                   {/* New quantity input */}
                   <div>
                     <input
-                      className={`w-full rounded-xl border bg-slate-50 px-3 py-2 text-right font-mono text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[var(--ring)] ${
+                      className={`w-full rounded-xl border bg-slate-50 px-3 py-2 text-right font-mono text-sm outline-none transition focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30 ${
                         hasChanged
                           ? "border-blue-300 bg-blue-50/30"
                           : "border-slate-200"
@@ -269,7 +269,7 @@ export function BulkStockSetupForm({
       </div>
 
       {/* Submit bar */}
-      <div className="flex items-center justify-between rounded-[24px] border border-white/70 bg-white/85 px-6 py-4 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="flex items-center justify-between rounded-lg border border-border bg-card px-6 py-4 shadow-sm">
         <p className="text-sm text-slate-600">
           {changedCount > 0 ? (
             <>

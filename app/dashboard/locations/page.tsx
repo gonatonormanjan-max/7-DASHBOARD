@@ -103,7 +103,7 @@ export default async function LocationsPage({ searchParams }: LocationsPageProps
         />
       </section>
 
-      <LocationsFilters canManage={canManage} filters={filters} />
+      <LocationsFilters filters={filters} />
 
       <LocationsTable
         canManage={canManage}
@@ -111,7 +111,20 @@ export default async function LocationsPage({ searchParams }: LocationsPageProps
         returnTo={returnTo}
       />
 
-      <Pagination pagination={pagination} />
+      <Pagination
+        basePath="/dashboard/locations"
+        itemLabel="locations"
+        pagination={pagination}
+        query={{
+          query: filters.query || undefined,
+          type: filters.type === "all" ? undefined : filters.type,
+          isActive: filters.isActive === "all" ? undefined : filters.isActive,
+          sortBy: filters.sortBy === "updatedAt" ? undefined : filters.sortBy,
+          sortOrder: filters.sortOrder === "desc" ? undefined : filters.sortOrder,
+          pageSize:
+            pagination.pageSize === DEFAULT_PAGE_SIZE ? undefined : pagination.pageSize,
+        }}
+      />
     </div>
   );
 }

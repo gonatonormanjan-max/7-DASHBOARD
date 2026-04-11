@@ -224,7 +224,7 @@ export function getRoleLabel(role: Role) {
 export function getRoleDescription(role: Role) {
   switch (role) {
     case "ADMIN":
-      return "Full control across inventory, orders, users, reporting, and settings.";
+      return "";
     case "SYSTEM_MANAGER":
       return "Operational control with strong oversight and limited ownership settings.";
     case "SALES_STAFF":

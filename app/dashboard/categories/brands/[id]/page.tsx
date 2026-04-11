@@ -39,7 +39,7 @@ export default async function BrandDetailPage({ params }: BrandDetailPageProps) 
       />
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="grid gap-4 sm:grid-cols-2">
             <DetailField label="Brand name" value={brand.name} />
             <DetailField label="Linked products" value={String(brand._count.products)} />
@@ -51,7 +51,7 @@ export default async function BrandDetailPage({ params }: BrandDetailPageProps) 
         </div>
 
         <aside className="space-y-6">
-          <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+          <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Record activity</h2>
             <div className="mt-4 space-y-4">
               <DetailField
@@ -73,7 +73,7 @@ export default async function BrandDetailPage({ params }: BrandDetailPageProps) 
         </aside>
       </section>
 
-      <section className="overflow-hidden rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <div className="border-b border-slate-200 px-6 py-5">
           <h2 className="text-lg font-semibold text-slate-950">Linked products</h2>
           <p className="mt-1 text-sm text-slate-500">

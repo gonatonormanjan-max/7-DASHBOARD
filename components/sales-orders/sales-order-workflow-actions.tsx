@@ -11,7 +11,7 @@ import type { SalesOrderStatus } from "@prisma/client";
 import { useActionState } from "react";
 
 type WorkflowState = {
-  status: "idle" | "error";
+  status: "idle" | "success" | "error";
   message?: string;
 };
 
@@ -50,7 +50,13 @@ function WorkflowActionForm({
         {label}
       </SubmitButton>
       {state.message ? (
-        <p className="max-w-md whitespace-pre-line text-sm text-destructive">
+        <p
+          className={
+            state.status === "error"
+              ? "max-w-md whitespace-pre-line text-sm text-destructive"
+              : "max-w-md whitespace-pre-line text-sm text-emerald-700"
+          }
+        >
           {state.message}
         </p>
       ) : null}

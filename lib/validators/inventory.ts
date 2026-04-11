@@ -110,6 +110,7 @@ export const inventoryTransferSchema = z
 const supplierReceiptItemSchema = z.object({
   productId: z.string().uuid(),
   quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+  unitCost: z.coerce.number().min(0, "Unit cost cannot be negative."),
 });
 
 export const supplierReceiptSchema = z.object({
@@ -219,6 +220,7 @@ export type SupplierReceiptFormValues = {
   items: Array<{
     productId: string;
     quantity: string;
+    unitCost: string;
   }>;
 };
 
@@ -327,7 +329,7 @@ export function extractSupplierReceiptValues(formData: FormData): SupplierReceip
   const itemIndexes = new Set<number>();
 
   for (const [key] of formData.entries()) {
-    const match = /^items\[(\d+)\]\.(productId|quantity)$/.exec(key);
+    const match = /^items\[(\d+)\]\.(productId|quantity|unitCost)$/.exec(key);
 
     if (match) {
       itemIndexes.add(Number.parseInt(match[1], 10));
@@ -339,6 +341,7 @@ export function extractSupplierReceiptValues(formData: FormData): SupplierReceip
     .map((index) => ({
       productId: String(formData.get(`items[${index}].productId`) ?? ""),
       quantity: String(formData.get(`items[${index}].quantity`) ?? ""),
+      unitCost: String(formData.get(`items[${index}].unitCost`) ?? ""),
     }));
 
   return {

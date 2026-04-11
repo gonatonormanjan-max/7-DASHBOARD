@@ -38,11 +38,11 @@ export function BrandForm({ action, mode, brand }: BrandFormProps) {
         </div>
       ) : null}
 
-      <div className="grid gap-6 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+      <div className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm">
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Brand name</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "name", brand?.name)}
             name="name"
             placeholder="Northstar"
@@ -57,7 +57,7 @@ export function BrandForm({ action, mode, brand }: BrandFormProps) {
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Description</span>
           <textarea
-            className="min-h-32 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="min-h-32 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "description", brand?.description)}
             name="description"
             placeholder="Optional internal description for manufacturer, label, or house-brand grouping."

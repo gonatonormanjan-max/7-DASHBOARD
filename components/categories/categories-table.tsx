@@ -28,7 +28,7 @@ export function CategoriesTable({
 }: CategoriesTableProps) {
   if (categories.length === 0) {
     return (
-      <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/65 px-6 py-16 text-center">
+      <div className="rounded-lg border border-dashed border-slate-300 bg-card px-6 py-16 text-center">
         <h2 className="text-lg font-semibold text-slate-900">No categories found</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">
           Create a category to keep the catalog organized before suppliers and orders expand.
@@ -38,10 +38,10 @@ export function CategoriesTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-white/70 bg-white/85 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50/70">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted">
             <tr className="text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               <th className="px-5 py-4">Category</th>
               <th className="px-5 py-4">Description</th>
@@ -50,7 +50,7 @@ export function CategoriesTable({
               <th className="px-5 py-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 bg-white">
+          <tbody className="divide-y divide-border bg-card">
             {categories.map((category) => {
               const deleteAction = deleteCategoryAction.bind(null, category.id, returnTo);
 

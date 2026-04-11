@@ -26,6 +26,7 @@ import { RevenueByBranchChart } from "@/components/reports/revenue-by-branch-cha
 import { BranchComparisonChart } from "@/components/reports/branch-comparison-chart";
 import { SeasonalTrendsChart } from "@/components/reports/seasonal-trends-chart";
 import { QuotaTracker } from "@/components/reports/quota-tracker";
+import { MetricContextStrip } from "@/components/reports/metric-context-strip";
 
 type ReportsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -76,6 +77,14 @@ function formatShortDate(dateString: string) {
 
 function formatUnits(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatPercent(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return "N/A";
+  }
+
+  return `${value.toFixed(1)}%`;
 }
 
 function getDayCardCopy(day: SalesTrendPoint | null, type: "highest" | "lowest") {
@@ -143,8 +152,8 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       DEFAULT_ANALYTICS_WINDOW_DAYS
     );
     const analytics = await getReportsAnalyticsData(analyticsDays);
-    const filteredRevenue = analytics.salesTrend.reduce((sum, day) => sum + day.revenue, 0);
-    const filteredUnits = analytics.salesTrend.reduce((sum, day) => sum + day.unitsSold, 0);
+    const filteredRevenue = analytics.financialSummary.totalRevenue;
+    const filteredUnits = analytics.financialSummary.totalUnitsSold;
 
     return (
       <div className="space-y-8">
@@ -155,7 +164,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           action={<TabToggle tabs={tabs} />}
         />
 
-        <section className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-950">Analytics controls</h2>
@@ -173,7 +182,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
                   Reporting window
                 </span>
                 <select
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                   defaultValue={String(analytics.analyticsDays)}
                   name="analyticsDays"
                 >
@@ -190,12 +199,31 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricContextStrip context={analytics.metricContext} />
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
           <StatCard
             label={`Revenue (${analytics.analyticsDays} days)`}
             value={formatCurrency(filteredRevenue)}
             tone="primary"
             description="Combined sales revenue inside the selected analytics window."
+          />
+          <StatCard
+            label={`COGS (${analytics.analyticsDays} days)`}
+            value={formatCurrency(analytics.financialSummary.totalCogs)}
+            description="Cost of goods sold based on per-location moving average at sale time."
+          />
+          <StatCard
+            label={`Gross profit (${analytics.analyticsDays} days)`}
+            value={formatCurrency(analytics.financialSummary.totalGrossProfit)}
+            tone="success"
+            description="Revenue minus COGS in the selected analytics window."
+          />
+          <StatCard
+            label={`Gross margin (${analytics.analyticsDays} days)`}
+            value={formatPercent(analytics.financialSummary.grossMarginPct)}
+            tone={analytics.financialSummary.grossMarginPct !== null && analytics.financialSummary.grossMarginPct < 15 ? "warning" : "default"}
+            description="Gross profit divided by revenue."
           />
           <StatCard
             label={`Units sold (${analytics.analyticsDays} days)`}
@@ -210,9 +238,12 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             description="Products that are already at or below their reorder threshold."
           />
           <StatCard
-            label="Branches with sales"
-            value={String(analytics.branchComparison.length)}
-            description="Branches with recorded sales activity in the selected window."
+            label="Cost shock events"
+            value={String(analytics.metricContext.costShockEventsInWindow)}
+            tone={
+              analytics.metricContext.costShockEscalationsInWindow > 0 ? "warning" : "default"
+            }
+            description="Inbound supplier/transfer cost changes beyond warning threshold."
           />
         </section>
 
@@ -308,6 +339,28 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           description="Combined sales revenue from the last 30 days."
         />
         <StatCard
+          label={`COGS (${REPORT_OVERVIEW_WINDOW_DAYS} days)`}
+          value={formatCurrency(overview.summary.totalCogs)}
+          description="Cost of goods sold based on moving-average unit cost at sale time."
+        />
+        <StatCard
+          label={`Gross profit (${REPORT_OVERVIEW_WINDOW_DAYS} days)`}
+          value={formatCurrency(overview.summary.totalGrossProfit)}
+          tone="success"
+          description="Revenue less COGS for the last 30 days."
+        />
+        <StatCard
+          label={`Gross margin (${REPORT_OVERVIEW_WINDOW_DAYS} days)`}
+          value={formatPercent(overview.summary.grossMarginPct)}
+          tone="warning"
+          description="Gross profit percentage for this window."
+        />
+      </section>
+
+      <MetricContextStrip context={overview.metricContext} />
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <StatCard
           label={`Units sold (${REPORT_OVERVIEW_WINDOW_DAYS} days)`}
           value={formatUnits(overview.summary.totalUnitsSold)}
           tone="success"
@@ -327,7 +380,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       </section>
 
       {overview.summary.noSalesDays > 0 ? (
-        <div className="rounded-[24px] border border-[#f2d2a2] bg-[#fff4e4] px-5 py-4 text-sm text-[#8a5610]">
+        <div className="rounded-lg border border-[#f2d2a2] bg-[#fff4e4] px-5 py-4 text-sm text-[#8a5610]">
           There {overview.summary.noSalesDays === 1 ? "was" : "were"}{" "}
           <strong>{overview.summary.noSalesDays}</strong>{" "}
           {overview.summary.noSalesDays === 1 ? "day" : "days"} with no recorded sales in
@@ -343,7 +396,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       />
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Need deeper analysis?</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
             Move into the Analytics view when you need category mix, top products, stock
@@ -357,7 +410,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           </Link>
         </div>
 
-        <div className="rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
+        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Need branch target checks?</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
             Use the Quota Tracker to test branch revenue or unit targets over any day

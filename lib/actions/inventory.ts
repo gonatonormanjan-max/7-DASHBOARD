@@ -5,6 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { LocationType, ProductStatus } from "@prisma/client";
 import { logAudit } from "@/lib/audit";
+import {
+  applyInboundMovingAverage,
+  getSaleCostSnapshot,
+  syncLocationCostSnapshot,
+} from "@/lib/costing";
 import { requirePermission } from "@/lib/dal/auth";
 import { withFlashMessage } from "@/lib/flash-toast";
 import { getAvailableQuantity } from "@/lib/inventory";
@@ -226,6 +231,12 @@ export async function adjustInventoryAction(
       });
     }
 
+    await syncLocationCostSnapshot(tx, {
+      locationId: location.id,
+      productId: product.id,
+      onHandQtySnapshot: nextQuantity,
+    });
+
     await tx.inventoryMovement.create({
       data: {
         type: movementType,
@@ -412,7 +423,17 @@ export async function supplierReceiptAction(
 
   await prisma.$transaction(async (tx) => {
     for (const item of parsed.data.items) {
-      const product = productsById.get(item.productId)!;
+      const stockBefore = await tx.locationStock.findUnique({
+        where: {
+          locationId_productId: {
+            locationId: location.id,
+            productId: item.productId,
+          },
+        },
+        select: {
+          quantity: true,
+        },
+      });
 
       await tx.inventoryMovement.create({
         data: {
@@ -422,7 +443,9 @@ export async function supplierReceiptAction(
           quantityChange: item.quantity,
           referenceType: "supplier.receipt",
           referenceId: parsed.data.referenceNumber ?? null,
-          notes: parsed.data.notes ?? null,
+          notes:
+            parsed.data.notes ??
+            `Supplier receipt at unit cost ${Number(item.unitCost).toFixed(2)}`,
           performedById: user.id,
         },
       });
@@ -441,6 +464,37 @@ export async function supplierReceiptAction(
         },
         update: {
           quantity: { increment: item.quantity },
+        },
+      });
+
+      await applyInboundMovingAverage({
+        tx,
+        locationId: location.id,
+        productId: item.productId,
+        onHandBefore: stockBefore?.quantity ?? 0,
+        inboundQty: item.quantity,
+        inboundUnitCost: item.unitCost,
+        performedById: user.id,
+        sourceType: "supplier.receipt",
+        sourceId: parsed.data.referenceNumber ?? receiptReferenceId,
+        reason: "Supplier receipt",
+      });
+
+      await tx.productSupplier.upsert({
+        where: {
+          productId_supplierId: {
+            productId: item.productId,
+            supplierId: supplier.id,
+          },
+        },
+        update: {
+          costPrice: item.unitCost,
+        },
+        create: {
+          productId: item.productId,
+          supplierId: supplier.id,
+          costPrice: item.unitCost,
+          isPrimary: false,
         },
       });
     }
@@ -462,6 +516,7 @@ export async function supplierReceiptAction(
             productId: item.productId,
             productName: productsById.get(item.productId)?.name,
             quantity: item.quantity,
+            unitCost: item.unitCost,
           })),
         },
       },
@@ -543,6 +598,24 @@ export async function transferInventoryAction(
   });
 
   await prisma.$transaction(async (tx) => {
+    const [sourceCostSnapshot, destinationStockBefore] = await Promise.all([
+      getSaleCostSnapshot(tx, {
+        locationId: sourceLocation.id,
+        productId: product.id,
+      }),
+      tx.locationStock.findUnique({
+        where: {
+          locationId_productId: {
+            locationId: destinationLocation.id,
+            productId: product.id,
+          },
+        },
+        select: {
+          quantity: true,
+        },
+      }),
+    ]);
+
     await tx.locationStock.update({
       where: { locationId_productId: { locationId: sourceLocation.id, productId: product.id } },
       data: { quantity: { decrement: parsed.data.quantity } },
@@ -581,6 +654,25 @@ export async function transferInventoryAction(
       ],
     });
 
+    await syncLocationCostSnapshot(tx, {
+      locationId: sourceLocation.id,
+      productId: product.id,
+      onHandQtySnapshot: sourceStock.quantity - parsed.data.quantity,
+    });
+
+    await applyInboundMovingAverage({
+      tx,
+      locationId: destinationLocation.id,
+      productId: product.id,
+      onHandBefore: destinationStockBefore?.quantity ?? 0,
+      inboundQty: parsed.data.quantity,
+      inboundUnitCost: sourceCostSnapshot.unitCost,
+      performedById: user.id,
+      sourceType: "inventory.transfer",
+      sourceId: transferGroupId,
+      reason: "Transfer in",
+    });
+
     await logAudit(
       {
         userId: user.id,
@@ -597,6 +689,8 @@ export async function transferInventoryAction(
           productId: product.id,
           productName: product.name,
           sku: product.sku,
+          transferUnitCost: sourceCostSnapshot.unitCost.toString(),
+          transferCostEstimated: sourceCostSnapshot.isEstimatedCost,
         },
       },
       tx
@@ -628,7 +722,7 @@ export async function initialStockAction(
   const [product, location, currentStock] = await Promise.all([
     prisma.product.findFirst({
       where: { id: parsed.data.productId, status: { not: "ARCHIVED" } },
-      select: { id: true, name: true, sku: true },
+      select: { id: true, name: true, sku: true, costPrice: true },
     }),
     prisma.stockLocation.findFirst({
       where: { id: parsed.data.locationId, isActive: true },
@@ -674,6 +768,19 @@ export async function initialStockAction(
         notes: parsed.data.notes ?? null,
         performedById: user.id,
       },
+    });
+
+    await applyInboundMovingAverage({
+      tx,
+      locationId: location.id,
+      productId: product.id,
+      onHandBefore: currentStock?.quantity ?? 0,
+      inboundQty: parsed.data.quantity,
+      inboundUnitCost: product.costPrice,
+      performedById: user.id,
+      sourceType: "inventory.initial_stock",
+      sourceId: null,
+      reason: "Initial stock load",
     });
 
     await logAudit(
@@ -753,7 +860,7 @@ export async function bulkStockSetupAction(
         id: { in: productIds },
         status: { in: [ProductStatus.ACTIVE, ProductStatus.INACTIVE] },
       },
-      select: { id: true, name: true, sku: true },
+      select: { id: true, name: true, sku: true, costPrice: true },
     }),
     prisma.locationStock.findMany({
       where: {
@@ -829,6 +936,27 @@ export async function bulkStockSetupAction(
           performedById: user.id,
         },
       });
+
+      if (quantityChange > 0) {
+        await applyInboundMovingAverage({
+          tx,
+          locationId: location.id,
+          productId: item.productId,
+          onHandBefore: currentQty,
+          inboundQty: quantityChange,
+          inboundUnitCost: productsById.get(item.productId)?.costPrice ?? 0,
+          performedById: user.id,
+          sourceType: "inventory.bulk_stock_setup",
+          sourceId: batchId,
+          reason: reasonLabel,
+        });
+      } else {
+        await syncLocationCostSnapshot(tx, {
+          locationId: location.id,
+          productId: item.productId,
+          onHandQtySnapshot: item.quantity,
+        });
+      }
     }
 
     const auditItems = parsed.data.items.map((item) => ({

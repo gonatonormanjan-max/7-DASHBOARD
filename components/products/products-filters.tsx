@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef } from "react";
 import type { ProductListFilters } from "@/lib/validators/products";
+import { Button } from "@/components/ui/button";
 
 type Option = {
   id: string;
@@ -25,7 +26,7 @@ export function ProductsFilters({
 
   return (
     <form
-      className="rounded-[24px] border border-white/70 bg-white/85 p-5 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]"
+      className="rounded-lg border border-border bg-card p-5 shadow-sm"
       method="get"
       ref={formRef}
     >
@@ -34,9 +35,9 @@ export function ProductsFilters({
 
       <div className="grid gap-4 xl:grid-cols-[2fr_repeat(3,minmax(0,1fr))]">
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Search</span>
+          <span className="text-sm font-medium text-foreground">Search</span>
           <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.query}
             name="query"
             onChange={() => {
@@ -51,9 +52,9 @@ export function ProductsFilters({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Category</span>
+          <span className="text-sm font-medium text-foreground">Category</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.categoryId ?? ""}
             name="categoryId"
           >
@@ -67,9 +68,9 @@ export function ProductsFilters({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Brand</span>
+          <span className="text-sm font-medium text-foreground">Brand</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.brandId ?? ""}
             name="brandId"
           >
@@ -83,9 +84,9 @@ export function ProductsFilters({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Status</span>
+          <span className="text-sm font-medium text-foreground">Status</span>
           <select
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={filters.status}
             name="status"
           >
@@ -98,23 +99,17 @@ export function ProductsFilters({
         </label>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-500">
+      <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
           Archived products stay hidden by default and should not be used for new transactions.
         </p>
         <div className="flex items-center gap-3">
-          <Link
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-            href="/dashboard/products"
-          >
-            Clear
+          <Link href="/dashboard/products">
+            <Button type="button" variant="outline">
+              Clear
+            </Button>
           </Link>
-          <button
-            className="rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-[#16304f]"
-            type="submit"
-          >
-            Apply filters
-          </button>
+          <Button type="submit">Apply filters</Button>
         </div>
       </div>
     </form>
