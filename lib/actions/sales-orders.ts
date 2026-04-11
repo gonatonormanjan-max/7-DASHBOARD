@@ -1,18 +1,18 @@
 "use server";
 
 import { randomInt } from "node:crypto";
-import { LocationType, Prisma, ProductStatus } from "@prisma/client";
+import { LocationType, PaymentMode, Prisma, ProductStatus, SalesOrderStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { ZodIssue } from "zod";
 import { logAudit } from "@/lib/audit";
 import { requirePermission } from "@/lib/dal/auth";
-import { withFlashMessage } from "@/lib/flash-toast";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
 import {
   extractSalesOrderFormValues,
   salesOrderFormSchema,
+  WALK_IN_CUSTOMER_NAME,
   type SalesOrderFormState,
 } from "@/lib/validators/sales-orders";
 
@@ -48,6 +48,33 @@ type StockRequirement = {
   locationName: string;
 };
 
+type PreparedSalesOrderItem = {
+  productId: string;
+  locationId: string;
+  quantity: number;
+  unitPrice: number;
+};
+
+type PaymentResolution =
+  | {
+      paymentMode: null;
+      cashAmount: null;
+      onlineAmount: null;
+      fieldErrors?: undefined;
+    }
+  | {
+      paymentMode: PaymentMode;
+      cashAmount: Prisma.Decimal;
+      onlineAmount: Prisma.Decimal;
+      fieldErrors?: undefined;
+    }
+  | {
+      paymentMode: null;
+      cashAmount: null;
+      onlineAmount: null;
+      fieldErrors: Record<string, string[] | undefined>;
+    };
+
 function toMoney(value: number) {
   return new Prisma.Decimal(value.toFixed(2));
 }
@@ -58,6 +85,7 @@ function generateSalesOrderNumber() {
 
 function buildFormValueMap(values: ReturnType<typeof extractSalesOrderFormValues>) {
   return {
+    intent: values.intent,
     locationId: values.locationId,
     defaultLocationId: values.defaultLocationId,
     customerName: values.customerName,
@@ -65,6 +93,9 @@ function buildFormValueMap(values: ReturnType<typeof extractSalesOrderFormValues
     notes: values.notes,
     itemsPayload: values.itemsPayload,
     customerMode: values.customerMode,
+    paymentMode: values.paymentMode,
+    cashAmount: values.cashAmount,
+    onlineAmount: values.onlineAmount,
   };
 }
 
@@ -93,6 +124,22 @@ function getInvalidProductErrors(
   items.forEach((item, index) => {
     if (invalidProductIds.has(item.productId)) {
       itemErrors[index] = "Select an active product.";
+    }
+  });
+
+  return itemErrors;
+}
+
+function getInvalidLocationErrors(
+  itemCount: number,
+  items: Array<{ locationId: string }>,
+  invalidLocationIds: Set<string>
+) {
+  const itemErrors = new Array<string | undefined>(itemCount).fill(undefined);
+
+  items.forEach((item, index) => {
+    if (invalidLocationIds.has(item.locationId)) {
+      itemErrors[index] = "Select an active branch for this cart line.";
     }
   });
 
@@ -128,7 +175,8 @@ function buildStockShortageMessage(
   shortages: Array<{
     productName: string;
     sku: string;
-    required: number;
+    required?: number;
+    quantity?: number;
     available: number;
     locationName: string;
   }>
@@ -137,9 +185,151 @@ function buildStockShortageMessage(
     "Insufficient stock for this order:",
     ...shortages.map(
       (shortage) =>
-        `${shortage.productName} (${shortage.sku}) at ${shortage.locationName}: needs ${shortage.required}, available ${shortage.available}.`
+        `${shortage.productName} (${shortage.sku}) at ${shortage.locationName}: needs ${shortage.required ?? shortage.quantity ?? 0}, available ${shortage.available}.`
     ),
   ].join("\n");
+}
+
+function buildStockShortageItemErrors(
+  items: PreparedSalesOrderItem[],
+  shortages: Array<{
+    productId: string;
+    locationId: string;
+    available: number;
+    locationName: string;
+  }>
+) {
+  const shortageMap = new Map(
+    shortages.map((shortage) => [
+      `${shortage.productId}:${shortage.locationId}`,
+      shortage.available === 0
+        ? `Out of stock in ${shortage.locationName}. Remove this item or switch branches.`
+        : `Only ${shortage.available} available in ${shortage.locationName}. Reduce the quantity or remove this item.`,
+    ])
+  );
+
+  const itemErrors = items.map((item) =>
+    shortageMap.get(`${item.productId}:${item.locationId}`)
+  );
+
+  return itemErrors.some(Boolean) ? itemErrors : undefined;
+}
+
+function parseIntent(rawIntent: string): "draft" | "record" | "record_and_new" {
+  return rawIntent === "record" || rawIntent === "record_and_new" ? rawIntent : "draft";
+}
+
+function normalizeCustomerName(customerMode: string, customerName: string, intent: string) {
+  const trimmedCustomerName = customerName.trim();
+
+  if (customerMode === "walk_in") {
+    return WALK_IN_CUSTOMER_NAME;
+  }
+
+  if (intent === "draft") {
+    return trimmedCustomerName;
+  }
+
+  return trimmedCustomerName;
+}
+
+function parseMoneyInput(value: string) {
+  if (!value.trim()) {
+    return null;
+  }
+
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : Number.NaN;
+}
+
+function amountsMatchTotal(left: number, right: number) {
+  return Math.abs(left - right) < 0.005;
+}
+
+function resolvePaymentDetails(input: {
+  paymentMode: string;
+  cashAmount: string;
+  onlineAmount: string;
+  orderTotal: number;
+  intent: "draft" | "record" | "record_and_new";
+}): PaymentResolution {
+  if (input.intent === "draft") {
+    return {
+      paymentMode: null,
+      cashAmount: null,
+      onlineAmount: null,
+    };
+  }
+
+  if (
+    input.paymentMode !== "CASH" &&
+    input.paymentMode !== "ONLINE" &&
+    input.paymentMode !== "MIXED"
+  ) {
+    return {
+      paymentMode: null,
+      cashAmount: null,
+      onlineAmount: null,
+      fieldErrors: {
+        paymentMode: ["Choose a mode of payment before recording the sale."],
+      },
+    };
+  }
+
+  if (input.paymentMode === "CASH") {
+    return {
+      paymentMode: PaymentMode.CASH,
+      cashAmount: toMoney(input.orderTotal),
+      onlineAmount: toMoney(0),
+    };
+  }
+
+  if (input.paymentMode === "ONLINE") {
+    return {
+      paymentMode: PaymentMode.ONLINE,
+      cashAmount: toMoney(0),
+      onlineAmount: toMoney(input.orderTotal),
+    };
+  }
+
+  const cashAmount = parseMoneyInput(input.cashAmount);
+  const onlineAmount = parseMoneyInput(input.onlineAmount);
+  const fieldErrors: Record<string, string[] | undefined> = {};
+
+  if (cashAmount === null || Number.isNaN(cashAmount) || cashAmount <= 0) {
+    fieldErrors.cashAmount = ["Enter the cash amount for a mixed payment."];
+  }
+
+  if (onlineAmount === null || Number.isNaN(onlineAmount) || onlineAmount <= 0) {
+    fieldErrors.onlineAmount = ["Enter the online amount for a mixed payment."];
+  }
+
+  if (
+    cashAmount !== null &&
+    !Number.isNaN(cashAmount) &&
+    onlineAmount !== null &&
+    !Number.isNaN(onlineAmount) &&
+    !amountsMatchTotal(cashAmount + onlineAmount, input.orderTotal)
+  ) {
+    fieldErrors.onlineAmount = [
+      `Cash and online amounts must add up to ${input.orderTotal.toFixed(2)}.`,
+    ];
+  }
+
+  if (Object.values(fieldErrors).some(Boolean)) {
+    return {
+      paymentMode: null,
+      cashAmount: null,
+      onlineAmount: null,
+      fieldErrors,
+    };
+  }
+
+  return {
+    paymentMode: PaymentMode.MIXED,
+    cashAmount: toMoney(cashAmount ?? 0),
+    onlineAmount: toMoney(onlineAmount ?? 0),
+  };
 }
 
 async function createSalesOrderRecord(
@@ -149,6 +339,10 @@ async function createSalesOrderRecord(
     customerEmail: string | null;
     notes: string | null;
     totalAmount: Prisma.Decimal;
+    status: SalesOrderStatus;
+    paymentMode: PaymentMode | null;
+    cashAmount: Prisma.Decimal | null;
+    onlineAmount: Prisma.Decimal | null;
     createdById: string;
   }
 ) {
@@ -160,8 +354,11 @@ async function createSalesOrderRecord(
           customerName: input.customerName,
           customerEmail: input.customerEmail,
           notes: input.notes,
-          status: "DRAFT",
+          status: input.status,
           totalAmount: input.totalAmount,
+          paymentMode: input.paymentMode,
+          cashAmount: input.cashAmount,
+          onlineAmount: input.onlineAmount,
           createdById: input.createdById,
         },
         select: {
@@ -414,14 +611,15 @@ export async function createSalesOrderAction(
   const user = await requirePermission("sales_orders", "create");
   const values = extractSalesOrderFormValues(formData);
   const fieldValues = buildFormValueMap(values);
+  const intent = parseIntent(values.intent);
 
   if (values.items === null) {
     return {
       status: "error",
-      message: "We could not read the line items. Please try again.",
+      message: "We could not read the customer cart. Please try again.",
       fieldErrors: {
-        items: ["We could not read the line items. Please try again."],
-        itemsPayload: ["We could not read the line items. Please try again."],
+        items: ["We could not read the customer cart. Please try again."],
+        itemsPayload: ["We could not read the customer cart. Please try again."],
       },
       values: fieldValues,
     };
@@ -441,7 +639,7 @@ export async function createSalesOrderAction(
     const itemErrors = buildItemErrors(parsed.error.issues);
 
     if (itemErrors) {
-      fieldErrors.items ??= ["Fix the highlighted line items before saving."];
+      fieldErrors.items ??= ["Fix the highlighted cart lines before saving."];
       fieldErrors.itemsPayload ??= fieldErrors.items;
     }
 
@@ -454,10 +652,56 @@ export async function createSalesOrderAction(
     };
   }
 
-  const [location, products] = await Promise.all([
-    prisma.stockLocation.findFirst({
+  const customerName = normalizeCustomerName(
+    values.customerMode,
+    parsed.data.customerName,
+    intent
+  );
+
+  if (intent !== "draft" && values.customerMode !== "walk_in" && !customerName) {
+    return {
+      status: "error",
+      message: "Add a customer name or mark this as a walk-in sale before recording.",
+      fieldErrors: {
+        customerName: ["Add a customer name or switch to walk-in sale before recording."],
+      },
+      values: fieldValues,
+    };
+  }
+
+  const preparedItems: PreparedSalesOrderItem[] = parsed.data.items.map((item) => ({
+    productId: item.productId,
+    locationId: item.locationId ?? parsed.data.locationId,
+    quantity: item.quantity,
+    unitPrice: item.unitPrice,
+  }));
+
+  if (user.role === "SALES_STAFF" && user.assignedLocationId) {
+    const hasCrossBranchItem = preparedItems.some(
+      (item) => item.locationId !== user.assignedLocationId
+    );
+
+    if (parsed.data.locationId !== user.assignedLocationId || hasCrossBranchItem) {
+      return {
+        status: "error",
+        message: "Sales staff can only record sales for their assigned branch.",
+        fieldErrors: {
+          locationId: ["This sale must stay under your assigned branch."],
+          items: ["This sale must stay under your assigned branch."],
+          itemsPayload: ["This sale must stay under your assigned branch."],
+        },
+        values: fieldValues,
+      };
+    }
+  }
+
+  const uniqueLocationIds = [...new Set(preparedItems.map((item) => item.locationId))];
+  const uniqueProductIds = [...new Set(preparedItems.map((item) => item.productId))];
+
+  const [locations, products] = await Promise.all([
+    prisma.stockLocation.findMany({
       where: {
-        id: parsed.data.locationId,
+        id: { in: uniqueLocationIds },
         type: LocationType.BRANCH,
         isActive: true,
       },
@@ -468,9 +712,7 @@ export async function createSalesOrderAction(
     }),
     prisma.product.findMany({
       where: {
-        id: {
-          in: [...new Set(parsed.data.items.map((item) => item.productId))],
-        },
+        id: { in: uniqueProductIds },
         status: ProductStatus.ACTIVE,
       },
       select: {
@@ -481,7 +723,10 @@ export async function createSalesOrderAction(
     }),
   ]);
 
-  if (!location) {
+  const locationsById = new Map(locations.map((location) => [location.id, location]));
+  const defaultLocation = locationsById.get(parsed.data.locationId);
+
+  if (!defaultLocation) {
     return {
       status: "error",
       message: "Select an active branch for this order.",
@@ -492,11 +737,34 @@ export async function createSalesOrderAction(
     };
   }
 
+  if (locations.length !== uniqueLocationIds.length) {
+    const invalidLocationIds = new Set(
+      preparedItems
+        .map((item) => item.locationId)
+        .filter((locationId) => !locationsById.has(locationId))
+    );
+
+    return {
+      status: "error",
+      message: "One or more cart lines point to an inactive branch.",
+      fieldErrors: {
+        items: ["Select an active branch for every cart line."],
+        itemsPayload: ["Select an active branch for every cart line."],
+      },
+      itemErrors: getInvalidLocationErrors(
+        preparedItems.length,
+        preparedItems,
+        invalidLocationIds
+      ),
+      values: fieldValues,
+    };
+  }
+
   const productsById = new Map(products.map((product) => [product.id, product]));
 
-  if (products.length !== new Set(parsed.data.items.map((item) => item.productId)).size) {
+  if (products.length !== uniqueProductIds.length) {
     const invalidProductIds = new Set(
-      parsed.data.items
+      preparedItems
         .map((item) => item.productId)
         .filter((productId) => !productsById.has(productId))
     );
@@ -505,60 +773,155 @@ export async function createSalesOrderAction(
       status: "error",
       message: "One or more selected products are no longer active.",
       fieldErrors: {
-        items: ["Select active products for every line item."],
-        itemsPayload: ["Select active products for every line item."],
+        items: ["Select active products for every cart line."],
+        itemsPayload: ["Select active products for every cart line."],
       },
       itemErrors: getInvalidProductErrors(
-        parsed.data.items.length,
-        parsed.data.items,
+        preparedItems.length,
+        preparedItems,
         invalidProductIds
       ),
       values: fieldValues,
     };
   }
 
-  const totalAmount = parsed.data.items.reduce(
+  const totalAmount = preparedItems.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,
     0
   );
 
+  const paymentDetails = resolvePaymentDetails({
+    paymentMode: values.paymentMode,
+    cashAmount: values.cashAmount,
+    onlineAmount: values.onlineAmount,
+    orderTotal: totalAmount,
+    intent,
+  });
+
+  if (paymentDetails.fieldErrors) {
+    return {
+      status: "error",
+      message: "Choose a valid payment setup before recording the sale.",
+      fieldErrors: paymentDetails.fieldErrors,
+      values: fieldValues,
+    };
+  }
+
+  const orderItemsForValidation: OrderMutationItem[] = preparedItems.map((item, index) => {
+    const product = productsById.get(item.productId);
+    const location = locationsById.get(item.locationId);
+
+    return {
+      id: `new-order-item-${index + 1}`,
+      productId: item.productId,
+      locationId: item.locationId,
+      quantity: item.quantity,
+      unitPrice: toMoney(item.unitPrice),
+      product: {
+        name: product?.name ?? "Unknown product",
+        sku: product?.sku ?? "UNKNOWN",
+      },
+      location: {
+        id: location?.id ?? item.locationId,
+        name: location?.name ?? "Unknown branch",
+      },
+    };
+  });
+
+  if (intent !== "draft") {
+    const requirements = buildStockRequirements(orderItemsForValidation);
+    const shortages = await findStockShortages(prisma, requirements);
+
+    if (shortages.length > 0) {
+      return {
+        status: "error",
+        message: "Some cart lines exceed the available stock.",
+        fieldErrors: {
+          items: ["Reduce or remove the highlighted cart lines before recording the sale."],
+          itemsPayload: ["Reduce or remove the highlighted cart lines before recording the sale."],
+        },
+        itemErrors: buildStockShortageItemErrors(preparedItems, shortages),
+        values: fieldValues,
+      };
+    }
+  }
+
+  const affectedLocationIds = [...new Set(preparedItems.map((item) => item.locationId))];
+
   const order = await prisma.$transaction(async (tx) => {
     const createdOrder = await createSalesOrderRecord(tx, {
-      customerName: parsed.data.customerName,
+      customerName,
       customerEmail: parsed.data.customerEmail || null,
       notes: parsed.data.notes,
       totalAmount: toMoney(totalAmount),
+      status: intent === "draft" ? SalesOrderStatus.DRAFT : SalesOrderStatus.COMPLETED,
+      paymentMode: paymentDetails.paymentMode,
+      cashAmount: paymentDetails.cashAmount,
+      onlineAmount: paymentDetails.onlineAmount,
       createdById: user.id,
     });
 
     await tx.salesOrderItem.createMany({
-      data: parsed.data.items.map((item) => ({
+      data: preparedItems.map((item) => ({
         salesOrderId: createdOrder.id,
         productId: item.productId,
-        locationId: location.id,
+        locationId: item.locationId,
         quantity: item.quantity,
         unitPrice: toMoney(item.unitPrice),
       })),
     });
 
+    if (intent !== "draft") {
+      for (const item of preparedItems) {
+        await tx.inventoryMovement.create({
+          data: {
+            type: "SALES_FULFILLED",
+            productId: item.productId,
+            locationId: item.locationId,
+            quantityChange: -item.quantity,
+            referenceType: "sales_order",
+            referenceId: createdOrder.id,
+            notes: `Recorded direct sale ${createdOrder.orderNumber}`,
+            performedById: user.id,
+          },
+        });
+
+        await tx.locationStock.update({
+          where: {
+            locationId_productId: {
+              locationId: item.locationId,
+              productId: item.productId,
+            },
+          },
+          data: {
+            quantity: { decrement: item.quantity },
+          },
+        });
+      }
+    }
+
     await logAudit(
       {
         userId: user.id,
-        action: "sales_order.create",
+        action: intent === "draft" ? "sales_order.create" : "sales_order.record",
         entity: "sales_order",
         entityId: createdOrder.id,
         details: {
           orderNumber: createdOrder.orderNumber,
-          status: "DRAFT",
-          customerName: parsed.data.customerName,
-          branchId: location.id,
-          branchName: location.name,
-          itemCount: parsed.data.items.length,
+          status: intent === "draft" ? "DRAFT" : "COMPLETED",
+          customerName: customerName || null,
+          branchId: defaultLocation.id,
+          branchName: defaultLocation.name,
+          itemCount: preparedItems.length,
           totalAmount: totalAmount.toFixed(2),
-          items: parsed.data.items.map((item) => ({
+          paymentMode: paymentDetails.paymentMode,
+          cashAmount: paymentDetails.cashAmount?.toString() ?? null,
+          onlineAmount: paymentDetails.onlineAmount?.toString() ?? null,
+          items: preparedItems.map((item) => ({
             ...item,
             productName: productsById.get(item.productId)?.name ?? null,
             sku: productsById.get(item.productId)?.sku ?? null,
+            branchName: locationsById.get(item.locationId)?.name ?? null,
           })),
         },
       },
@@ -568,7 +931,12 @@ export async function createSalesOrderAction(
     return createdOrder;
   });
 
-  revalidateSalesOrderPaths({ orderId: order.id });
+  revalidateSalesOrderPaths({ orderId: order.id, locationIds: affectedLocationIds });
+
+  if (intent === "record_and_new") {
+    redirect("/dashboard/sales-orders/new");
+  }
+
   redirect(`/dashboard/sales-orders/${order.id}`);
 }
 

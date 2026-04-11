@@ -13,7 +13,10 @@ import {
 import { ChartCard } from "./chart-card";
 
 type SalesTrendChartProps = {
-  data: Array<{ date: string; revenue: number; orderCount: number }>;
+  data: Array<{ date: string; revenue: number; unitsSold: number }>;
+  days?: number;
+  title?: string;
+  description?: string;
 };
 
 function formatDate(dateStr: string) {
@@ -28,25 +31,24 @@ function formatCurrencyTick(value: number) {
   return `$${value}`;
 }
 
-export function SalesTrendChart({ data }: SalesTrendChartProps) {
-  if (data.every((d) => d.revenue === 0 && d.orderCount === 0)) {
+export function SalesTrendChart({
+  data,
+  days = 30,
+  title = `Revenue and Units (${days} days)`,
+  description = "Daily revenue and unit volume.",
+}: SalesTrendChartProps) {
+  if (data.every((d) => d.revenue === 0 && d.unitsSold === 0)) {
     return (
-      <ChartCard
-        title="Sales Trend (30 days)"
-        description="Daily revenue and order volume."
-      >
+      <ChartCard title={title} description={description}>
         <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 text-sm text-slate-500">
-          No sales data recorded in the last 30 days.
+          No sales data recorded in the selected period.
         </div>
       </ChartCard>
     );
   }
 
   return (
-    <ChartCard
-      title="Sales Trend (30 days)"
-      description="Daily revenue and order volume."
-    >
+    <ChartCard title={title} description={description}>
       <ResponsiveContainer width="100%" height={320}>
         <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -63,7 +65,7 @@ export function SalesTrendChart({ data }: SalesTrendChartProps) {
             width={60}
           />
           <YAxis
-            yAxisId="orders"
+            yAxisId="units"
             orientation="right"
             tick={{ fontSize: 12, fill: "#64748b" }}
             width={40}
@@ -93,10 +95,10 @@ export function SalesTrendChart({ data }: SalesTrendChartProps) {
             activeDot={{ r: 4 }}
           />
           <Line
-            yAxisId="orders"
+            yAxisId="units"
             type="monotone"
-            dataKey="orderCount"
-            name="Orders"
+            dataKey="unitsSold"
+            name="Units Sold"
             stroke="#12805c"
             strokeWidth={2}
             dot={false}

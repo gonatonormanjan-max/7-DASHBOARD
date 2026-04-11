@@ -198,6 +198,27 @@ export async function getPurchaseOrderById(id: string) {
   };
 }
 
+export async function getPurchaseOrderMovements(purchaseOrderId: string) {
+  return prisma.inventoryMovement.findMany({
+    where: {
+      referenceType: "purchase_order",
+      referenceId: purchaseOrderId,
+    },
+    include: {
+      product: {
+        select: { name: true, sku: true },
+      },
+      location: {
+        select: { name: true, code: true },
+      },
+      performedBy: {
+        select: { firstName: true, lastName: true },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
 export async function getPurchaseOrderFormOptions() {
   const [suppliers, warehouses, products, supplierProductLinks] = await Promise.all([
     prisma.supplier.findMany({

@@ -76,7 +76,7 @@ export function Pagination({
   query = {},
   itemLabel = "products",
 }: PaginationProps) {
-  if (pagination.totalCount === 0 || pagination.totalPages <= 1) {
+  if (!pagination || pagination.totalCount === 0 || pagination.totalPages <= 1) {
     return null;
   }
 

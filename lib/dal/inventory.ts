@@ -414,7 +414,16 @@ export async function getInventoryPageData(
       ? {}
       : { type: filters.movementType as MovementType };
 
-  const [stockRows, movements, categories, brands, products] =
+  const movementWhere: Prisma.InventoryMovementWhereInput = {
+    ...locationWhere,
+    ...movementTypeWhere,
+    ...(dateRangeWhere ? { createdAt: dateRangeWhere } : {}),
+    ...(filters.query || filters.categoryId || filters.brandId
+      ? { product: productWhere }
+      : {}),
+  };
+
+  const [stockRows, movementTotalCount, categories, brands, products] =
     await Promise.all([
       prisma.locationStock.findMany({
         where: {
@@ -424,31 +433,8 @@ export async function getInventoryPageData(
         select: inventoryStockSelect,
         orderBy: { product: { name: "asc" } },
       }),
-      prisma.inventoryMovement.findMany({
-        where: {
-          ...locationWhere,
-          ...movementTypeWhere,
-          ...(dateRangeWhere ? { createdAt: dateRangeWhere } : {}),
-        },
-        select: {
-          id: true,
-          type: true,
-          quantityChange: true,
-          transferGroupId: true,
-          notes: true,
-          createdAt: true,
-          location: {
-            select: { id: true, name: true, code: true },
-          },
-          product: {
-            select: { id: true, name: true, sku: true },
-          },
-          performedBy: {
-            select: { id: true, firstName: true, lastName: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 50,
+      prisma.inventoryMovement.count({
+        where: movementWhere,
       }),
       prisma.category.findMany({
         select: { id: true, name: true },
@@ -468,6 +454,37 @@ export async function getInventoryPageData(
         orderBy: { name: "asc" },
       }),
     ]);
+
+  const movementPagination = getPaginationMeta(
+    filters.page,
+    filters.pageSize,
+    movementTotalCount
+  );
+  const movementOffset = (movementPagination.page - 1) * movementPagination.pageSize;
+
+  const movements = await prisma.inventoryMovement.findMany({
+    where: movementWhere,
+    select: {
+      id: true,
+      type: true,
+      quantityChange: true,
+      transferGroupId: true,
+      notes: true,
+      createdAt: true,
+      location: {
+        select: { id: true, name: true, code: true },
+      },
+      product: {
+        select: { id: true, name: true, sku: true },
+      },
+      performedBy: {
+        select: { id: true, firstName: true, lastName: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    skip: movementOffset,
+    take: movementPagination.pageSize,
+  });
 
   const processedStockRows =
     filters.locationId === "system-wide"
@@ -515,6 +532,7 @@ export async function getInventoryPageData(
       brands,
       products,
     },
+    movementPagination,
     summary,
   };
 }

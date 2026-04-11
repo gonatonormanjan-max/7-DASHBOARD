@@ -1,4 +1,4 @@
-import type { SalesOrderStatus } from "@prisma/client";
+import type { PaymentMode, SalesOrderStatus } from "@prisma/client";
 
 export const SALES_ORDER_ENTRY_STATUSES: SalesOrderStatus[] = ["COMPLETED"];
 
@@ -29,6 +29,17 @@ export function getSalesOrderStatusBadgeClass(status: SalesOrderStatus) {
       return "border-[#c5e7db] bg-[#edf8f4] text-[#0a4429]";
     case "CANCELLED":
       return "border-red-200 bg-red-50 text-destructive";
+  }
+}
+
+export function formatPaymentMode(paymentMode: PaymentMode) {
+  switch (paymentMode) {
+    case "CASH":
+      return "Cash";
+    case "ONLINE":
+      return "Online payment";
+    case "MIXED":
+      return "Mixed payment";
   }
 }
 

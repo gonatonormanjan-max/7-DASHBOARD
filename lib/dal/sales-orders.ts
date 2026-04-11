@@ -205,6 +205,9 @@ export async function getSalesOrderById(id: string) {
       customerEmail: true,
       status: true,
       totalAmount: true,
+      paymentMode: true,
+      cashAmount: true,
+      onlineAmount: true,
       notes: true,
       archivedAt: true,
       createdAt: true,
@@ -246,6 +249,8 @@ export async function getSalesOrderById(id: string) {
   return {
     ...order,
     totalAmount: order.totalAmount.toString(),
+    cashAmount: order.cashAmount?.toString() ?? null,
+    onlineAmount: order.onlineAmount?.toString() ?? null,
     items: order.items.map((item) => ({
       ...item,
       unitPrice: item.unitPrice.toString(),
@@ -254,7 +259,7 @@ export async function getSalesOrderById(id: string) {
 }
 
 export async function getSalesOrderFormOptions() {
-  const [locations, products] = await Promise.all([
+  const [locations, products, stockRows] = await Promise.all([
     prisma.stockLocation.findMany({
       where: { isActive: true, type: LocationType.BRANCH },
       orderBy: { name: "asc" },
@@ -274,6 +279,18 @@ export async function getSalesOrderFormOptions() {
         unitPrice: true,
       },
     }),
+    prisma.locationStock.findMany({
+      where: {
+        location: { isActive: true, type: LocationType.BRANCH },
+        product: { status: ProductStatus.ACTIVE },
+      },
+      select: {
+        locationId: true,
+        productId: true,
+        quantity: true,
+        reservedQty: true,
+      },
+    }),
   ]);
 
   return {
@@ -281,6 +298,11 @@ export async function getSalesOrderFormOptions() {
     products: products.map((p) => ({
       ...p,
       unitPrice: p.unitPrice.toString(),
+    })),
+    stockRows: stockRows.map((row) => ({
+      locationId: row.locationId,
+      productId: row.productId,
+      availableQty: getAvailableQuantity(row.quantity, row.reservedQty),
     })),
   };
 }

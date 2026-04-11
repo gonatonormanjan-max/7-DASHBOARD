@@ -32,6 +32,7 @@ type StockRow = {
 };
 
 type CustomerMode = "named" | "walk_in";
+type PaymentMode = "" | "CASH" | "ONLINE" | "MIXED";
 
 type SaleLineItem = {
   localId: string;
@@ -453,6 +454,18 @@ export function SalesOrderFormRedesign({
     if (initialCustomerMode === "walk_in") return WALK_IN_CUSTOMER_NAME;
     return fieldValue(state, "customerName", "");
   });
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>(() => {
+    const savedPaymentMode = fieldValue(state, "paymentMode", "");
+    return savedPaymentMode === "ONLINE" || savedPaymentMode === "MIXED"
+      ? savedPaymentMode
+      : "CASH";
+  });
+  const [cashAmount, setCashAmount] = useState(() =>
+    fieldValue(state, "cashAmount", "")
+  );
+  const [onlineAmount, setOnlineAmount] = useState(() =>
+    fieldValue(state, "onlineAmount", "")
+  );
   const initialCart =
     prefill?.items && prefill.items.length > 0
       ? mergeCartItems(
@@ -647,12 +660,35 @@ export function SalesOrderFormRedesign({
   const overriddenLines = cart.filter(
     (item) => item.priceOverridden || item.warehouseOverridden
   ).length;
+  const submittedCashAmount =
+    paymentMode === "CASH"
+      ? normalizeMoney(orderTotal)
+      : paymentMode === "ONLINE"
+        ? "0.00"
+        : normalizeMoney(cashAmount, "");
+  const submittedOnlineAmount =
+    paymentMode === "ONLINE"
+      ? normalizeMoney(orderTotal)
+      : paymentMode === "CASH"
+        ? "0.00"
+        : normalizeMoney(onlineAmount, "");
+  const mixedCashValue = Number(submittedCashAmount);
+  const mixedOnlineValue = Number(submittedOnlineAmount);
+  const mixedBalance =
+    paymentMode === "MIXED" &&
+    Number.isFinite(mixedCashValue) &&
+    Number.isFinite(mixedOnlineValue)
+      ? orderTotal - (mixedCashValue + mixedOnlineValue)
+      : orderTotal;
 
   return (
     <form action={formAction} className="space-y-6">
       <input name="itemsPayload" type="hidden" value={serializedItems} />
       <input name="defaultLocationId" type="hidden" value={saleWarehouseId} />
       <input name="customerMode" type="hidden" value={customerMode} />
+      <input name="paymentMode" type="hidden" value={paymentMode} />
+      <input name="cashAmount" type="hidden" value={submittedCashAmount} />
+      <input name="onlineAmount" type="hidden" value={submittedOnlineAmount} />
 
       {state.message ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -729,8 +765,7 @@ export function SalesOrderFormRedesign({
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-[var(--ring)]"
                 name="customerName"
                 onChange={(event) => setCustomerName(event.target.value)}
-                placeholder="Customer or account name"
-                required
+                placeholder="Optional for drafts, or use walk-in sale"
                 type="text"
                 value={customerName}
               />
@@ -780,7 +815,7 @@ export function SalesOrderFormRedesign({
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-              Add items
+              Customer cart
             </p>
             <div className="flex flex-wrap gap-2 text-sm text-slate-500">
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">
@@ -802,8 +837,8 @@ export function SalesOrderFormRedesign({
               onSelect={addProductToCart}
               placeholder={
                 saleWarehouseId
-                  ? "Type product name or SKU to add an item"
-                  : "Select a sale warehouse before adding items"
+                  ? "Type product name or SKU to add to cart"
+                  : "Select a sale warehouse before building the cart"
               }
               products={products}
             />
@@ -827,22 +862,33 @@ export function SalesOrderFormRedesign({
 
           {cart.length === 0 ? (
             <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/70 px-6 py-8 text-center">
-              <p className="text-sm text-slate-500">Search or scan to add your first item.</p>
+              <p className="text-sm text-slate-500">Search or scan to add the first cart item.</p>
             </div>
           ) : (
             <div className="space-y-2">
               {cart.map((item, index) => {
                 const product = productMap.get(item.productId);
-                const availableQty = stockMap.get(`${item.productId}:${item.warehouseId}`) ?? null;
-                const isOverStock =
-                  availableQty !== null && item.quantity > availableQty;
+                const stockKey = `${item.productId}:${item.warehouseId}`;
+                const availableQty = stockMap.has(stockKey)
+                  ? (stockMap.get(stockKey) ?? 0)
+                  : item.warehouseId
+                    ? 0
+                    : null;
+                const isOverStock = availableQty !== null && item.quantity > availableQty;
                 const rowError = state.itemErrors?.[index];
                 const lineAmount = lineTotal(item.quantity, item.unitPrice);
                 const warehouseLabel =
                   locations.find((location) => location.id === item.warehouseId)?.name ??
                   "selected location";
-                const isExpanded = expandedItems.has(item.localId) || !!rowError || isOverStock;
+                const isExpanded = expandedItems.has(item.localId);
                 const hasOverrides = item.priceOverridden || item.warehouseOverridden;
+                const rowAlert =
+                  rowError ??
+                  (isOverStock
+                    ? availableQty === 0
+                      ? `Out of stock in ${warehouseLabel}. Remove this item or switch branches.`
+                      : `Only ${availableQty} unit${availableQty === 1 ? "" : "s"} available in ${warehouseLabel}.`
+                    : null);
 
                 return (
                   <article
@@ -923,9 +969,36 @@ export function SalesOrderFormRedesign({
                         </button>
                       </div>
                     </div>
+                    {rowAlert ? (
+                      <div className="border-t border-red-200 bg-red-50/80 px-4 py-2.5">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-xs font-medium text-red-700">{rowAlert}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {isOverStock && availableQty !== null && availableQty > 0 ? (
+                              <Button
+                                className="h-8 text-xs"
+                                onClick={() => updateQuantity(item.localId, availableQty)}
+                                type="button"
+                                variant="outline"
+                              >
+                                Set to {availableQty}
+                              </Button>
+                            ) : null}
+                            <Button
+                              className="h-8 text-xs"
+                              onClick={() => removeItem(item.localId)}
+                              type="button"
+                              variant="outline"
+                            >
+                              Remove item
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
 
                     {/* Row error — always visible when present */}
-                    {rowError && !isExpanded ? (
+                    {rowError && !isExpanded && !rowAlert ? (
                       <div className="border-t border-red-200 px-4 py-2">
                         <p className="text-xs font-medium text-red-700">{rowError}</p>
                       </div>
@@ -1027,21 +1100,21 @@ export function SalesOrderFormRedesign({
       </section>
 
       <section className="mt-2 rounded-[24px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_50px_-38px_rgba(15,23,42,0.35)]">
-        {pricesLocked && inReview ? (
+        {inReview ? (
           /* ── CASHIER: Review & confirm panel ── */
           <div className="space-y-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                Order summary
+                Review sale
               </p>
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600">
                 <span>
                   <span className="font-medium text-slate-800">Branch: </span>
-                  {locations.find((loc) => loc.id === lockedLocationId)?.name ?? lockedLocationId}
+                  {locations.find((loc) => loc.id === saleWarehouseId)?.name ?? saleWarehouseId}
                 </span>
                 <span>
                   <span className="font-medium text-slate-800">Customer: </span>
-                  {customerMode === "walk_in" ? "Walk-in" : customerName || "—"}
+                  {customerMode === "walk_in" ? "Walk-in" : customerName || "Customer not set yet"}
                 </span>
               </div>
             </div>
@@ -1081,6 +1154,88 @@ export function SalesOrderFormRedesign({
               </table>
             </div>
 
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-slate-900">Mode of payment</p>
+                  <p className="text-sm text-slate-500">
+                    Choose how the sale will be settled before recording it.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(["CASH", "ONLINE", "MIXED"] as const).map((option) => (
+                    <button
+                      key={option}
+                      className={cn(
+                        "rounded-full border px-4 py-2 text-sm font-medium transition",
+                        paymentMode === option
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      )}
+                      onClick={() => setPaymentMode(option)}
+                      type="button"
+                    >
+                      {option === "CASH"
+                        ? "Cash"
+                        : option === "ONLINE"
+                          ? "Online payment"
+                          : "Mixed"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {state.fieldErrors?.paymentMode ? (
+                <p className="mt-3 text-sm text-destructive">{state.fieldErrors.paymentMode[0]}</p>
+              ) : null}
+
+              {paymentMode === "MIXED" ? (
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Cash amount</span>
+                    <input
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                      min={0}
+                      onChange={(event) => setCashAmount(event.target.value)}
+                      step="0.01"
+                      type="number"
+                      value={cashAmount}
+                    />
+                    {state.fieldErrors?.cashAmount ? (
+                      <p className="text-sm text-destructive">{state.fieldErrors.cashAmount[0]}</p>
+                    ) : null}
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Online amount</span>
+                    <input
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[var(--ring)]"
+                      min={0}
+                      onChange={(event) => setOnlineAmount(event.target.value)}
+                      step="0.01"
+                      type="number"
+                      value={onlineAmount}
+                    />
+                    {state.fieldErrors?.onlineAmount ? (
+                      <p className="text-sm text-destructive">{state.fieldErrors.onlineAmount[0]}</p>
+                    ) : null}
+                  </label>
+
+                  <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                    Remaining balance:{" "}
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        Math.abs(mixedBalance) < 0.005 ? "text-emerald-700" : "text-red-600"
+                      )}
+                    >
+                      {formatCurrency(mixedBalance)}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-0.5">
                 <h2 className="text-2xl font-semibold text-slate-950">
@@ -1098,8 +1253,17 @@ export function SalesOrderFormRedesign({
                   className="text-sm text-slate-500 underline decoration-slate-300 underline-offset-2 transition hover:text-slate-700 hover:decoration-slate-500"
                   onClick={() => setInReview(false)}
                 >
-                  ← Back to edit
+                  Back to edit
                 </button>
+                <SubmitButton
+                  disabled={!isReady || !saleWarehouseId || cart.length === 0}
+                  name="intent"
+                  pendingLabel="Recording..."
+                  value="record_and_new"
+                  variant="outline"
+                >
+                  Record and start new
+                </SubmitButton>
                 <SubmitButton
                   className="px-8 py-3 text-base font-semibold"
                   disabled={!isReady || !saleWarehouseId || cart.length === 0}
@@ -1107,7 +1271,7 @@ export function SalesOrderFormRedesign({
                   pendingLabel="Recording sale..."
                   value="record"
                 >
-                  Confirm &amp; Record
+                  Record sale
                 </SubmitButton>
               </div>
             </div>
@@ -1135,37 +1299,23 @@ export function SalesOrderFormRedesign({
               >
                 Cancel
               </Link>
-              {pricesLocked ? (
-                <Button
-                  type="button"
-                  className="px-8 py-3 text-base font-semibold"
-                  disabled={!isReady || !saleWarehouseId || cart.length === 0}
-                  onClick={() => setInReview(true)}
-                >
-                  Review Sale
-                </Button>
-              ) : (
-                <>
-                  <SubmitButton
-                    disabled={!isReady || !saleWarehouseId || cart.length === 0}
-                    name="intent"
-                    pendingLabel="Recording..."
-                    value="record_and_new"
-                    variant="outline"
-                  >
-                    Record &amp; start new
-                  </SubmitButton>
-                  <SubmitButton
-                    className="px-8 py-3 text-base font-semibold"
-                    disabled={!isReady || !saleWarehouseId || cart.length === 0}
-                    name="intent"
-                    pendingLabel="Recording sale..."
-                    value="record"
-                  >
-                    Record sale
-                  </SubmitButton>
-                </>
-              )}
+              <SubmitButton
+                disabled={!isReady || !saleWarehouseId || cart.length === 0}
+                name="intent"
+                pendingLabel="Saving draft..."
+                value="draft"
+                variant="outline"
+              >
+                Save draft
+              </SubmitButton>
+              <Button
+                type="button"
+                className="px-8 py-3 text-base font-semibold"
+                disabled={!isReady || !saleWarehouseId || cart.length === 0}
+                onClick={() => setInReview(true)}
+              >
+                Review sale
+              </Button>
             </div>
           </div>
         )}

@@ -139,7 +139,7 @@ export async function createPurchaseOrderAction(
   }
 
   const productIds = [...new Set(parsed.data.items.map((item) => item.productId))];
-  const [supplier, warehouse, products, supplierLinks] = await Promise.all([
+  const [supplier, warehouse, products] = await Promise.all([
     prisma.supplier.findFirst({
       where: { id: parsed.data.supplierId, isActive: true },
       select: { id: true, name: true },
@@ -158,13 +158,6 @@ export async function createPurchaseOrderAction(
         status: { in: [ProductStatus.ACTIVE, ProductStatus.INACTIVE] },
       },
       select: { id: true, name: true, sku: true },
-    }),
-    prisma.productSupplier.findMany({
-      where: {
-        supplierId: parsed.data.supplierId,
-        productId: { in: productIds },
-      },
-      select: { productId: true, costPrice: true },
     }),
   ]);
 
@@ -195,17 +188,6 @@ export async function createPurchaseOrderAction(
     };
   }
 
-  const linkedProductIds = new Set(supplierLinks.map((link) => link.productId));
-
-  if (supplierLinks.length !== productIds.length || productIds.some((id) => !linkedProductIds.has(id))) {
-    return {
-      status: "error",
-      message: "One or more selected products are not linked to this supplier.",
-      fieldErrors: { items: ["Select products linked to the chosen supplier."] },
-      values,
-    };
-  }
-
   const productsById = new Map(products.map((product) => [product.id, product]));
   const totalAmount = parsed.data.items.reduce(
     (sum, item) => sum + item.quantity * item.unitCost,
@@ -229,6 +211,28 @@ export async function createPurchaseOrderAction(
         unitCost: toMoney(item.unitCost),
       })),
     });
+
+    // Upsert ProductSupplier links so the cost history is kept current.
+    // This ensures future POs with the same supplier auto-populate the cost.
+    for (const item of parsed.data.items) {
+      await tx.productSupplier.upsert({
+        where: {
+          productId_supplierId: {
+            productId: item.productId,
+            supplierId: supplier.id,
+          },
+        },
+        update: {
+          costPrice: toMoney(item.unitCost),
+        },
+        create: {
+          productId: item.productId,
+          supplierId: supplier.id,
+          costPrice: toMoney(item.unitCost),
+          isPrimary: false,
+        },
+      });
+    }
 
     await logAudit(
       {
@@ -266,7 +270,31 @@ export async function createPurchaseOrderAction(
   redirect(`/dashboard/purchase-orders/${order.id}`);
 }
 
-export async function approvePurchaseOrderAction(orderId: string) {
+type PurchaseOrderWorkflowState = {
+  status: "idle" | "error";
+  message?: string;
+};
+
+function getOrderIdFromWorkflowForm(formData: FormData) {
+  const orderId = formData.get("orderId");
+  if (typeof orderId !== "string") return null;
+  const trimmed = orderId.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export async function approvePurchaseOrderAction(
+  _prevState: PurchaseOrderWorkflowState,
+  formData: FormData
+): Promise<PurchaseOrderWorkflowState> {
+  const orderId = getOrderIdFromWorkflowForm(formData);
+
+  if (!orderId) {
+    return {
+      status: "error",
+      message: "Purchase order reference is missing. Refresh and try again.",
+    };
+  }
+
   const user = await requirePermission("purchase_orders", "approve");
   const order = await prisma.purchaseOrder.findUnique({
     where: { id: orderId },
@@ -301,12 +329,24 @@ export async function approvePurchaseOrderAction(orderId: string) {
 
   revalidatePurchaseOrderPaths({ orderId });
   return {
-    status: "success" as const,
+    status: "idle",
     message: `Purchase order ${order.orderNumber} approved.`,
   };
 }
 
-export async function cancelPurchaseOrderAction(orderId: string) {
+export async function cancelPurchaseOrderAction(
+  _prevState: PurchaseOrderWorkflowState,
+  formData: FormData
+): Promise<PurchaseOrderWorkflowState> {
+  const orderId = getOrderIdFromWorkflowForm(formData);
+
+  if (!orderId) {
+    return {
+      status: "error",
+      message: "Purchase order reference is missing. Refresh and try again.",
+    };
+  }
+
   const user = await requirePermission("purchase_orders", "update");
   const order = await prisma.purchaseOrder.findUnique({
     where: { id: orderId },
@@ -352,7 +392,7 @@ export async function cancelPurchaseOrderAction(orderId: string) {
 
   revalidatePurchaseOrderPaths({ orderId });
   return {
-    status: "success" as const,
+    status: "idle",
     message: `Purchase order ${order.orderNumber} cancelled.`,
   };
 }
@@ -585,4 +625,27 @@ export async function receivePurchaseOrderAction(
       success: `Stock received for purchase order ${order.orderNumber}.`,
     })
   );
+}
+
+/**
+ * Returns current stock quantities for a list of products at a given warehouse.
+ * Used by the receive form to show a before/after stock impact preview.
+ */
+export async function getStockLevelsForReceivingAction(
+  productIds: string[],
+  warehouseId: string
+): Promise<Array<{ productId: string; quantity: number }>> {
+  await requirePermission("purchase_orders", "receive");
+
+  if (!productIds.length || !warehouseId) return [];
+
+  const stocks = await prisma.locationStock.findMany({
+    where: {
+      locationId: warehouseId,
+      productId: { in: productIds },
+    },
+    select: { productId: true, quantity: true },
+  });
+
+  return stocks;
 }

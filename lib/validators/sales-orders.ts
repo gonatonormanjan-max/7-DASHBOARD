@@ -2,6 +2,8 @@ import { z } from "zod";
 import { paginationQuerySchema } from "@/lib/pagination";
 
 export const WALK_IN_CUSTOMER_NAME = "Walk-in Customer";
+export const SALES_ORDER_PAYMENT_MODES = ["CASH", "ONLINE", "MIXED"] as const;
+export const SALES_ORDER_INTENTS = ["draft", "record", "record_and_new"] as const;
 
 function firstString(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -29,6 +31,7 @@ function normalizeDateFilter(value: string | undefined) {
 
 const salesOrderItemSchema = z.object({
   productId: z.string().uuid("Select a valid product."),
+  locationId: z.string().uuid("Select a valid branch.").optional(),
   quantity: z.coerce.number().int().min(1, "Quantity must be at least 1."),
   unitPrice: z.coerce.number().min(0, "Unit price cannot be negative."),
 });
@@ -41,7 +44,7 @@ const optionalDateSchema = z
 
 export const salesOrderFormSchema = z.object({
   locationId: z.string().uuid("Select a valid branch."),
-  customerName: z.string().trim().min(1, "Customer name is required.").max(150),
+  customerName: z.string().trim().max(150, "Customer name must be 150 characters or fewer."),
   customerEmail: z
     .string()
     .trim()
@@ -88,6 +91,10 @@ export type ExtractedSalesOrderFormValues = {
   notes: string;
   itemsPayload: string;
   items: unknown;
+  intent: string;
+  paymentMode: string;
+  cashAmount: string;
+  onlineAmount: string;
   customerMode: string;
   defaultLocationId: string;
 };
@@ -123,9 +130,9 @@ export function extractSalesOrderFormValues(
   formData: FormData
 ): ExtractedSalesOrderFormValues {
   const itemsPayload = String(formData.get("itemsPayload") ?? "");
-  const locationId = String(
-    formData.get("locationId") ?? formData.get("defaultLocationId") ?? ""
-  );
+  const explicitLocationId = String(formData.get("locationId") ?? "");
+  const defaultLocationId = String(formData.get("defaultLocationId") ?? "");
+  const locationId = explicitLocationId || defaultLocationId;
 
   return {
     locationId,
@@ -134,7 +141,11 @@ export function extractSalesOrderFormValues(
     notes: String(formData.get("notes") ?? ""),
     itemsPayload,
     items: parseItemsPayload(itemsPayload),
+    intent: String(formData.get("intent") ?? "draft"),
+    paymentMode: String(formData.get("paymentMode") ?? ""),
+    cashAmount: String(formData.get("cashAmount") ?? ""),
+    onlineAmount: String(formData.get("onlineAmount") ?? ""),
     customerMode: String(formData.get("customerMode") ?? ""),
-    defaultLocationId: locationId,
+    defaultLocationId,
   };
 }

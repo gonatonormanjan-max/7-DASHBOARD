@@ -2,7 +2,6 @@ import Form from "next/form";
 import Link from "next/link";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermission } from "@/lib/dal/auth";
-import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { getSalesOrderListData } from "@/lib/dal/sales-orders";
 import { parseSalesOrderListFilters } from "@/lib/validators/sales-orders";
 import { formatCurrency } from "@/lib/products";
@@ -184,7 +183,7 @@ export default async function SalesOrdersPage({
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-700">
-                      {order.customerName}
+                      {order.customerName.trim() || "Customer not set yet"}
                     </td>
                     <td className="px-4 py-3">
                       <SalesOrderStatusBadge status={order.status} />
@@ -193,7 +192,7 @@ export default async function SalesOrdersPage({
                       {order._count.items}
                     </td>
                     <td className="px-4 py-3 text-sm font-semibold text-slate-900">
-                      {formatCurrency(order.totalAmount.toString())}
+                      {formatCurrency(order.totalAmount)}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-500">
                       {order.createdAt.toLocaleDateString("en-PH", {

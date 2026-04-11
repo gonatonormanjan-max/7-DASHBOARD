@@ -4,7 +4,7 @@ import { hasPermission } from "@/lib/permissions";
 import { requirePermission } from "@/lib/dal/auth";
 import { getSalesOrderById } from "@/lib/dal/sales-orders";
 import { formatCurrency } from "@/lib/products";
-import { formatSalesOrderStatus } from "@/lib/sales-orders";
+import { formatPaymentMode } from "@/lib/sales-orders";
 import { Button } from "@/components/ui/button";
 import { DetailField } from "@/components/ui/detail-field";
 import { PageHeader } from "@/components/ui/page-header";
@@ -26,6 +26,16 @@ export default async function SalesOrderDetailPage({
   if (!order) {
     notFound();
   }
+
+  const customerLabel = order.customerName.trim() || "Customer not set yet";
+  const paymentLabel = order.paymentMode
+    ? formatPaymentMode(order.paymentMode)
+    : order.status === "DRAFT"
+      ? "Payment pending until sale is recorded"
+      : "Payment not captured";
+  const paymentBreakdown = order.paymentMode
+    ? `Cash ${formatCurrency(order.cashAmount ?? 0)} / Online ${formatCurrency(order.onlineAmount ?? 0)}`
+    : "No payment breakdown yet";
 
   return (
     <div className="space-y-8">
@@ -52,10 +62,15 @@ export default async function SalesOrderDetailPage({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <DetailField label="Customer" value={order.customerName} />
+            <DetailField label="Customer" value={customerLabel} />
             <DetailField label="Customer email" value={order.customerEmail ?? "Not provided"} />
-            <DetailField label="Branch" value={order.items[0]?.location.name ?? "—"} />
-            <DetailField label="Total amount" value={formatCurrency(order.totalAmount.toString())} />
+            <DetailField
+              label="Branch"
+              value={order.items[0]?.location.name ?? "Branch not set yet"}
+            />
+            <DetailField label="Total amount" value={formatCurrency(order.totalAmount)} />
+            <DetailField label="Payment mode" value={paymentLabel} />
+            <DetailField label="Payment breakdown" value={paymentBreakdown} />
             <DetailField
               label="Created by"
               value={`${order.createdBy.firstName} ${order.createdBy.lastName}`}
@@ -86,10 +101,10 @@ export default async function SalesOrderDetailPage({
                     <td className="px-4 py-3 text-sm text-slate-600">{item.product.sku}</td>
                     <td className="px-4 py-3 text-sm text-slate-700">{item.quantity}</td>
                     <td className="px-4 py-3 text-sm text-slate-700">
-                      {formatCurrency(item.unitPrice.toString())}
+                      {formatCurrency(item.unitPrice)}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-700">
-                      {formatCurrency(item.unitPrice.mul(item.quantity).toString())}
+                      {formatCurrency(Number(item.unitPrice) * item.quantity)}
                     </td>
                   </tr>
                 ))}
@@ -98,7 +113,7 @@ export default async function SalesOrderDetailPage({
                     Total
                   </td>
                   <td className="px-4 py-3 text-sm font-semibold text-slate-900">
-                    {formatCurrency(order.totalAmount.toString())}
+                    {formatCurrency(order.totalAmount)}
                   </td>
                 </tr>
               </tbody>
@@ -163,7 +178,7 @@ export default async function SalesOrderDetailPage({
           <div className="pt-2">
             <Link href="/dashboard/sales-orders">
               <Button type="button" variant="ghost" className="w-full">
-                ← Back to Orders
+                Back to orders
               </Button>
             </Link>
           </div>
