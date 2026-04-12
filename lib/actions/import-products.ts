@@ -7,10 +7,6 @@ import { requirePermission } from "@/lib/dal/auth";
 import { prisma } from "@/lib/prisma";
 import { IMPORT_ROW_LIMIT } from "@/lib/validators/product-import";
 
-// ----------------------------------------------------------------
-// Types
-// ----------------------------------------------------------------
-
 export type ImportRow = {
   rowIndex: number;
   name: string;
@@ -30,38 +26,28 @@ export type ImportResult = {
   errors: Array<{ rowIndex: number; reason: string }>;
 };
 
-// ----------------------------------------------------------------
-// checkBatchSkus — called client-side after parse to pre-flag
-// SKUs that already exist in the DB. Re-checked server-side
-// inside importProducts before committing.
-// ----------------------------------------------------------------
-
 export async function checkBatchSkus(skus: string[]): Promise<string[]> {
   await requirePermission("products", "create");
 
-  if (skus.length === 0) return [];
+  if (skus.length === 0) {
+    return [];
+  }
 
   const existing = await prisma.product.findMany({
     where: { sku: { in: skus } },
     select: { sku: true },
   });
 
-  return existing.map((p) => p.sku);
+  return existing.map((product) => product.sku);
 }
-
-// ----------------------------------------------------------------
-// importProducts — final server-side transaction
-// ----------------------------------------------------------------
 
 export async function importProducts(payload: {
   rows: ImportRow[];
   newCategoriesToCreate: string[];
 }): Promise<ImportResult> {
   const user = await requirePermission("products", "create");
-
   const { rows, newCategoriesToCreate } = payload;
 
-  // Hard cap — reject if somehow bypassed client-side limit
   if (rows.length > IMPORT_ROW_LIMIT) {
     return {
       created: 0,
@@ -70,49 +56,25 @@ export async function importProducts(payload: {
     };
   }
 
-  // ---- Server-side re-validation ----
-  const validationErrors: Array<{ rowIndex: number; reason: string }> = [];
   const validRows: ImportRow[] = [];
 
-  // Collect all SKUs to check for intra-batch duplicates
-  const skusSeen = new Map<string, number>(); // sku → first rowIndex
-  for (const row of rows) {
-    const sku = row.sku.trim().toUpperCase();
-    if (skusSeen.has(sku)) {
-      validationErrors.push({
-        rowIndex: row.rowIndex,
-        reason: `Duplicate SKU "${sku}" within this batch (also on row ${skusSeen.get(sku)}).`,
-      });
-    } else {
-      skusSeen.set(sku, row.rowIndex);
-    }
-  }
-
-  const duplicateBatchSkus = new Set(
-    validationErrors.map((e) => {
-      // extract sku from reason string — simpler: just re-collect
-      return "";
-    })
-  );
-  // Cleaner: collect duplicate SKUs directly
   const skuCount = new Map<string, number>();
   for (const row of rows) {
     const sku = row.sku.trim().toUpperCase();
     skuCount.set(sku, (skuCount.get(sku) ?? 0) + 1);
   }
+
   const batchDuplicateSkus = new Set(
     [...skuCount.entries()].filter(([, count]) => count > 1).map(([sku]) => sku)
   );
 
-  // Re-check all SKUs against DB (race condition guard)
-  const allSkus = rows.map((r) => r.sku.trim().toUpperCase());
+  const allSkus = rows.map((row) => row.sku.trim().toUpperCase());
   const existingInDb = await prisma.product.findMany({
     where: { sku: { in: allSkus } },
     select: { sku: true },
   });
-  const existingSkuSet = new Set(existingInDb.map((p) => p.sku));
+  const existingSkuSet = new Set(existingInDb.map((product) => product.sku));
 
-  // Per-row server validation
   const serverErrors: Array<{ rowIndex: number; reason: string }> = [];
 
   for (const row of rows) {
@@ -123,16 +85,24 @@ export async function importProducts(payload: {
     const unitPrice = Number(row.unitPrice);
     const costPrice = Number(row.costPrice);
 
-    if (!name) issues.push("Name is required.");
-    else if (name.length > 120) issues.push("Name exceeds 120 characters.");
+    if (!name) {
+      issues.push("Name is required.");
+    } else if (name.length > 120) {
+      issues.push("Name exceeds 120 characters.");
+    }
 
-    if (!sku) issues.push("SKU is required.");
+    if (!sku) {
+      issues.push("SKU is required.");
+    }
 
-    if (!category) issues.push("Category is required.");
+    if (!category) {
+      issues.push("Category is required.");
+    }
 
     if (!row.unitPrice.trim() || !Number.isFinite(unitPrice) || unitPrice < 0) {
       issues.push("Invalid unit price.");
     }
+
     if (!row.costPrice.trim() || !Number.isFinite(costPrice) || costPrice < 0) {
       issues.push("Invalid cost price.");
     }
@@ -161,9 +131,10 @@ export async function importProducts(payload: {
 
     if (issues.length > 0) {
       serverErrors.push({ rowIndex: row.rowIndex, reason: issues.join(" ") });
-    } else {
-      validRows.push(row);
+      continue;
     }
+
+    validRows.push(row);
   }
 
   if (validRows.length === 0) {
@@ -174,13 +145,11 @@ export async function importProducts(payload: {
     };
   }
 
-  // ---- Transaction ----
   const transactionErrors: Array<{ rowIndex: number; reason: string }> = [];
   let created = 0;
 
   try {
     await prisma.$transaction(async (tx) => {
-      // 1. Create new categories that the user explicitly approved
       for (const name of newCategoriesToCreate) {
         await tx.category.upsert({
           where: { name },
@@ -189,23 +158,20 @@ export async function importProducts(payload: {
         });
       }
 
-      // 2. Fetch full category map (existing + newly created)
       const allCategories = await tx.category.findMany({
         select: { id: true, name: true },
       });
-      const catMap = new Map(allCategories.map((c) => [c.name.toLowerCase(), c.id]));
+      const categoryMap = new Map(allCategories.map((category) => [category.name.toLowerCase(), category.id]));
 
-      // 3. Fetch full brand map
       const allBrands = await tx.brand.findMany({
         select: { id: true, name: true },
       });
-      const brandMap = new Map(allBrands.map((b) => [b.name.toLowerCase(), b.id]));
+      const brandMap = new Map(allBrands.map((brand) => [brand.name.toLowerCase(), brand.id]));
 
-      // 4. Create products
       const results = await Promise.allSettled(
         validRows.map(async (row) => {
           const sku = row.sku.trim().toUpperCase();
-          const categoryId = catMap.get(row.category.trim().toLowerCase());
+          const categoryId = categoryMap.get(row.category.trim().toLowerCase());
 
           if (!categoryId) {
             throw new Error(`Category "${row.category}" not found.`);
@@ -245,22 +211,21 @@ export async function importProducts(payload: {
         })
       );
 
-      // Tally results
-      for (let i = 0; i < results.length; i++) {
-        const result = results[i];
-        const row = validRows[i];
+      for (let index = 0; index < results.length; index++) {
+        const result = results[index];
+        const row = validRows[index];
 
         if (result.status === "fulfilled") {
           created++;
-        } else {
-          transactionErrors.push({
-            rowIndex: row.rowIndex,
-            reason: result.reason instanceof Error ? result.reason.message : "Database error.",
-          });
+          continue;
         }
+
+        transactionErrors.push({
+          rowIndex: row.rowIndex,
+          reason: result.reason instanceof Error ? result.reason.message : "Database error.",
+        });
       }
 
-      // 5. Audit log for the bulk import
       if (created > 0) {
         await logAudit(
           {

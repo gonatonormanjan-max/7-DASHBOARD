@@ -188,14 +188,15 @@ export const NAV_ITEMS: NavItem[] = [
     resource: "audit_logs",
     action: "read",
   },
-  {
-    title: "Settings",
-    href: "/dashboard/settings",
-    icon: "settings",
-    section: "System",
-    resource: "settings",
-    action: "read",
-  },
+  // Settings nav item intentionally hidden — section not yet built
+  // {
+  //   title: "Settings",
+  //   href: "/dashboard/settings",
+  //   icon: "settings",
+  //   section: "System",
+  //   resource: "settings",
+  //   action: "read",
+  // },
 ];
 
 export function hasPermission(

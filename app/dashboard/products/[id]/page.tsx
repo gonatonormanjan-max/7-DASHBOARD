@@ -28,12 +28,12 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   const productId = product.id;
   const returnTo = `/dashboard/products/${productId}`;
 
-  async function archiveAction(_: FormData) {
+  async function archiveAction() {
     "use server";
     await archiveProductAction(productId, returnTo);
   }
 
-  async function restoreAction(_: FormData) {
+  async function restoreAction() {
     "use server";
     await restoreProductAction(productId, returnTo);
   }

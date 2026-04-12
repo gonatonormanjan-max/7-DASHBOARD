@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -127,13 +127,18 @@ type ImportWizardProps = {
   initialBrands: Array<{ id: string; name: string }>;
 };
 
-export function ImportWizard({ initialCategories, initialBrands }: ImportWizardProps) {
+export function ImportWizard({ initialCategories }: ImportWizardProps) {
   const [state, setState] = useState<WizardState>(INITIAL_STATE);
   const [isChecking, setIsChecking] = useState(false);
 
-  // Build stable Maps from the props (categories + brands don't change mid-session)
-  const categoryNameMap = new Map(initialCategories.map((c) => [c.name.toLowerCase(), c.id]));
-  const brandNameMap = new Map(initialBrands.map((b) => [b.name.toLowerCase(), b.id]));
+  // Build a stable category lookup so downstream callbacks can safely depend on it.
+  const categoryNameMap = useMemo(
+    () =>
+      new Map(
+        initialCategories.map((category) => [category.name.toLowerCase(), category.id])
+      ),
+    [initialCategories]
+  );
 
   // ------------------------------------------------------------------
   // Step 1 → Step 2 transition
@@ -192,7 +197,7 @@ export function ImportWizard({ initialCategories, initialBrands }: ImportWizardP
 
       setIsChecking(false);
     },
-    [categoryNameMap] // eslint-disable-line react-hooks/exhaustive-deps
+    [categoryNameMap]
   );
 
   // ------------------------------------------------------------------
@@ -235,7 +240,7 @@ export function ImportWizard({ initialCategories, initialBrands }: ImportWizardP
         };
       });
     },
-    [categoryNameMap] // eslint-disable-line react-hooks/exhaustive-deps
+    [categoryNameMap]
   );
 
   // ------------------------------------------------------------------

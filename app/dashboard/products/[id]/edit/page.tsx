@@ -29,7 +29,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
   if (product.status === "ARCHIVED") {
     const productId = product.id;
 
-    async function restoreAction(_: FormData) {
+    async function restoreAction() {
       "use server";
       await restoreProductAction(productId, `/dashboard/products/${productId}`);
     }

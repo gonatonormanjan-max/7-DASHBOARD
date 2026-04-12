@@ -123,7 +123,7 @@ function toPercentDecimal(value: number | null) {
   return new Prisma.Decimal(value.toFixed(4));
 }
 
-function calcWeightedAverageCost(input: {
+export function calculateWeightedAverageCost(input: {
   onHandBefore: number;
   prevAvgUnitCost: number;
   inboundQty: number;
@@ -296,7 +296,7 @@ export async function applyInboundMovingAverage({
         : inboundCostDecimal;
     const prevAvgUnitCost = prevAvgUnitCostDecimal.toNumber();
 
-    const { nextAvgUnitCost, onHandAfter } = calcWeightedAverageCost({
+    const { nextAvgUnitCost, onHandAfter } = calculateWeightedAverageCost({
       onHandBefore: safeOnHandBefore,
       prevAvgUnitCost,
       inboundQty: inboundQtyWhole,

@@ -22,6 +22,10 @@ import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
 import {
+  resolveSalesOrderPayment,
+  type SalesOrderIntent,
+} from "@/lib/sales-order-payments";
+import {
   SALES_ORDER_ARCHIVEABLE_STATUSES,
   canArchiveSalesOrder,
   canManageSalesOrderArchive,
@@ -98,26 +102,6 @@ type PreparedSalesOrderCostedItem = PreparedSalesOrderItem & {
   lineGrossProfit: Prisma.Decimal;
   isEstimatedCost: boolean;
 };
-
-type PaymentResolution =
-  | {
-      paymentMode: null;
-      cashAmount: null;
-      onlineAmount: null;
-      fieldErrors?: undefined;
-    }
-  | {
-      paymentMode: PaymentMode;
-      cashAmount: Prisma.Decimal;
-      onlineAmount: Prisma.Decimal;
-      fieldErrors?: undefined;
-    }
-  | {
-      paymentMode: null;
-      cashAmount: null;
-      onlineAmount: null;
-      fieldErrors: Record<string, string[] | undefined>;
-    };
 
 function toMoney(value: number) {
   return new Prisma.Decimal(value.toFixed(2));
@@ -259,7 +243,7 @@ function buildStockShortageItemErrors(
   return itemErrors.some(Boolean) ? itemErrors : undefined;
 }
 
-function parseIntent(rawIntent: string): "draft" | "record" | "record_and_new" {
+function parseIntent(rawIntent: string): SalesOrderIntent {
   return rawIntent === "record" || rawIntent === "record_and_new" ? rawIntent : "draft";
 }
 
@@ -294,105 +278,6 @@ function normalizeCustomerName(customerMode: string, customerName: string, inten
   }
 
   return trimmedCustomerName;
-}
-
-function parseMoneyInput(value: string) {
-  if (!value.trim()) {
-    return null;
-  }
-
-  const parsedValue = Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : Number.NaN;
-}
-
-function amountsMatchTotal(left: number, right: number) {
-  return Math.abs(left - right) < 0.005;
-}
-
-function resolvePaymentDetails(input: {
-  paymentMode: string;
-  cashAmount: string;
-  onlineAmount: string;
-  orderTotal: number;
-  intent: "draft" | "record" | "record_and_new";
-}): PaymentResolution {
-  if (input.intent === "draft") {
-    return {
-      paymentMode: null,
-      cashAmount: null,
-      onlineAmount: null,
-    };
-  }
-
-  if (
-    input.paymentMode !== "CASH" &&
-    input.paymentMode !== "ONLINE" &&
-    input.paymentMode !== "MIXED"
-  ) {
-    return {
-      paymentMode: null,
-      cashAmount: null,
-      onlineAmount: null,
-      fieldErrors: {
-        paymentMode: ["Choose a mode of payment before recording the sale."],
-      },
-    };
-  }
-
-  if (input.paymentMode === "CASH") {
-    return {
-      paymentMode: "CASH",
-      cashAmount: toMoney(input.orderTotal),
-      onlineAmount: toMoney(0),
-    };
-  }
-
-  if (input.paymentMode === "ONLINE") {
-    return {
-      paymentMode: "ONLINE",
-      cashAmount: toMoney(0),
-      onlineAmount: toMoney(input.orderTotal),
-    };
-  }
-
-  const cashAmount = parseMoneyInput(input.cashAmount);
-  const onlineAmount = parseMoneyInput(input.onlineAmount);
-  const fieldErrors: Record<string, string[] | undefined> = {};
-
-  if (cashAmount === null || Number.isNaN(cashAmount) || cashAmount <= 0) {
-    fieldErrors.cashAmount = ["Enter the cash amount for a mixed payment."];
-  }
-
-  if (onlineAmount === null || Number.isNaN(onlineAmount) || onlineAmount <= 0) {
-    fieldErrors.onlineAmount = ["Enter the online amount for a mixed payment."];
-  }
-
-  if (
-    cashAmount !== null &&
-    !Number.isNaN(cashAmount) &&
-    onlineAmount !== null &&
-    !Number.isNaN(onlineAmount) &&
-    !amountsMatchTotal(cashAmount + onlineAmount, input.orderTotal)
-  ) {
-    fieldErrors.onlineAmount = [
-      `Cash and online amounts must add up to ${input.orderTotal.toFixed(2)}.`,
-    ];
-  }
-
-  if (Object.values(fieldErrors).some(Boolean)) {
-    return {
-      paymentMode: null,
-      cashAmount: null,
-      onlineAmount: null,
-      fieldErrors,
-    };
-  }
-
-  return {
-    paymentMode: "MIXED",
-    cashAmount: toMoney(cashAmount ?? 0),
-    onlineAmount: toMoney(onlineAmount ?? 0),
-  };
 }
 
 async function createSalesOrderRecord(
@@ -957,7 +842,7 @@ export async function createSalesOrderAction(
     0
   );
 
-  const paymentDetails = resolvePaymentDetails({
+  const paymentDetails = resolveSalesOrderPayment({
     paymentMode: values.paymentMode,
     cashAmount: values.cashAmount,
     onlineAmount: values.onlineAmount,
@@ -965,7 +850,7 @@ export async function createSalesOrderAction(
     intent,
   });
 
-  if (paymentDetails.fieldErrors) {
+  if (!paymentDetails.ok) {
     return {
       status: "error",
       message: "Choose a valid payment setup before recording the sale.",
@@ -973,6 +858,11 @@ export async function createSalesOrderAction(
       values: fieldValues,
     };
   }
+
+  const resolvedCashAmount =
+    paymentDetails.cashAmount === null ? null : toMoney(paymentDetails.cashAmount);
+  const resolvedOnlineAmount =
+    paymentDetails.onlineAmount === null ? null : toMoney(paymentDetails.onlineAmount);
 
   const orderItemsForValidation: OrderMutationItem[] = preparedItems.map((item, index) => {
     const product = productsById.get(item.productId);
@@ -1020,15 +910,15 @@ export async function createSalesOrderAction(
   const order = await prisma.$transaction(async (tx) => {
     const createdOrder = await createSalesOrderRecord(tx, {
       customerName,
-      customerEmail: parsed.data.customerEmail || null,
-      notes: parsed.data.notes,
-      totalAmount: toMoney(totalAmount),
-      status: intent === "draft" ? SalesOrderStatus.DRAFT : SalesOrderStatus.COMPLETED,
-      paymentMode: paymentDetails.paymentMode,
-      cashAmount: paymentDetails.cashAmount,
-      onlineAmount: paymentDetails.onlineAmount,
-      createdById: user.id,
-    });
+        customerEmail: parsed.data.customerEmail || null,
+        notes: parsed.data.notes,
+        totalAmount: toMoney(totalAmount),
+        status: intent === "draft" ? SalesOrderStatus.DRAFT : SalesOrderStatus.COMPLETED,
+        paymentMode: paymentDetails.paymentMode,
+        cashAmount: resolvedCashAmount,
+        onlineAmount: resolvedOnlineAmount,
+        createdById: user.id,
+      });
 
     const costSnapshotsByKey = new Map<
       string,
@@ -1156,8 +1046,8 @@ export async function createSalesOrderAction(
           itemCount: preparedItems.length,
           totalAmount: totalAmount.toFixed(2),
           paymentMode: paymentDetails.paymentMode,
-          cashAmount: paymentDetails.cashAmount?.toString() ?? null,
-          onlineAmount: paymentDetails.onlineAmount?.toString() ?? null,
+          cashAmount: resolvedCashAmount?.toString() ?? null,
+          onlineAmount: resolvedOnlineAmount?.toString() ?? null,
           estimatedCostLineCount: costedItems.filter((item) => item.isEstimatedCost).length,
           items: costedItems.map((item) => ({
             ...item,

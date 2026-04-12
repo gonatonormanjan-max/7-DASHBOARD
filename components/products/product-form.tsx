@@ -9,7 +9,6 @@ import {
 } from "@/lib/validators/products";
 import { InlineCategoryModal } from "@/components/products/inline-category-modal";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { Button } from "@/components/ui/button";
 
 type Option = {
   id: string;

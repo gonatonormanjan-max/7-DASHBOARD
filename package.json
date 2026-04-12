@@ -8,6 +8,8 @@
     "start": "next start",
     "postinstall": "prisma generate",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "backfill:costing": "npx tsx scripts/backfill-moving-average-cost.ts"
   },
   "dependencies": {
@@ -41,6 +43,7 @@
     "eslint-config-next": "16.2.1",
     "prisma": "^7.6.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.4"
   }
 }
