@@ -106,7 +106,7 @@ export function SalesOrdersTable({
                         <Button variant="outline">View</Button>
                       </Link>
                       {canCreate && order.status !== "CANCELLED" ? (
-                        <Link href={`/dashboard/sales-orders/new?from=${order.id}`}>
+                        <Link href={`/dashboard/sales-orders/create/new?from=${order.id}`}>
                           <Button>Duplicate</Button>
                         </Link>
                       ) : null}

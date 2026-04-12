@@ -138,7 +138,7 @@ export function DashboardSidebar({ navItems, user }: DashboardSidebarProps) {
       {hasPermission(user.role, "sales_orders", "create") ? (
         <div className={cn("hidden pb-4 lg:block", isCollapsed ? "px-2" : "px-4")}>
           <Link
-            href="/dashboard/sales-orders/new"
+            href="/dashboard/sales-orders/create/new"
             className={cn(
               "flex h-10 w-full items-center justify-center rounded-lg border border-sidebar-border text-sidebar-primary text-sm font-medium transition-colors hover:bg-sidebar-accent",
               isCollapsed ? "gap-0" : "gap-2"

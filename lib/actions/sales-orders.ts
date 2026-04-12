@@ -670,7 +670,7 @@ export async function createSalesOrderAction(
   const user = await requirePermission("sales_orders", "create");
   const activeLocationId = await requireSalesStaffActiveLocationId({
     user,
-    returnTo: "/dashboard/sales-orders/new",
+    returnTo: "/dashboard/sales-orders/create/new",
   });
   const values = extractSalesOrderFormValues(formData);
   const fieldValues = buildFormValueMap(values);
@@ -1074,7 +1074,7 @@ export async function createSalesOrderAction(
   revalidateSalesOrderPaths({ orderId: order.id, locationIds: affectedLocationIds });
 
   if (intent === "record_and_new") {
-    redirect("/dashboard/sales-orders/new");
+    redirect("/dashboard/sales-orders/create/new");
   }
 
   redirect(`/dashboard/sales-orders/${order.id}`);

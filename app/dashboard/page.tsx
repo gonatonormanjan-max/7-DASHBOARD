@@ -179,7 +179,7 @@ export default async function DashboardPage() {
             />
             <DashboardStatLinkCard
               description="Open the sales order form to record a new transaction."
-              href="/dashboard/sales-orders/new"
+              href="/dashboard/sales-orders/create/new"
               label="Quick Action"
               tone="primary"
               value="New Sale"

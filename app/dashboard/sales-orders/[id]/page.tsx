@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getSalesOrderById } from "@/lib/dal/sales-orders";
@@ -13,13 +13,31 @@ import { SalesOrderWorkflowActions } from "@/components/sales-orders/sales-order
 
 type SalesOrderDetailPageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{
+    from?: string | string[];
+  }>;
 };
+
+function readParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 export default async function SalesOrderDetailPage({
   params,
+  searchParams,
 }: SalesOrderDetailPageProps) {
-  const user = await requirePermission("sales_orders", "read");
   const { id } = await params;
+  if (id === "new") {
+    const resolvedSearchParams = await searchParams;
+    const from = readParam(resolvedSearchParams.from);
+
+    if (from) {
+      redirect(`/dashboard/sales-orders/create/new?from=${encodeURIComponent(from)}`);
+    }
+
+    redirect("/dashboard/sales-orders/create/new");
+  }
+  const user = await requirePermission("sales_orders", "read");
   const activeLocationId = await requireSalesStaffActiveLocationId({
     user,
     returnTo: `/dashboard/sales-orders/${id}`,
