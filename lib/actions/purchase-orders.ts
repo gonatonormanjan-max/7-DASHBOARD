@@ -31,6 +31,7 @@ function revalidatePurchaseOrderPaths(options: {
   const paths = new Set<string>([
     "/dashboard/purchase-orders",
     "/dashboard/inventory",
+    "/dashboard/inventory/receive",
   ]);
 
   if (options.orderId) {

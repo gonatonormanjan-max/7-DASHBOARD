@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { SalesOrderStatus } from "@prisma/client";
 import { formatCurrency } from "@/lib/products";
-import { formatSalesOrderStatus } from "@/lib/sales-orders";
+import { canArchiveSalesOrder, formatSalesOrderStatus } from "@/lib/sales-orders";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ArchiveOrderButton, UnarchiveOrderButton } from "@/components/sales-orders/archive-actions";
@@ -27,6 +27,7 @@ type SalesOrderRow = {
 type SalesOrdersTableProps = {
   orders: SalesOrderRow[];
   canCreate: boolean;
+  canManageArchive?: boolean;
   hasFilters?: boolean;
   isArchiveView?: boolean;
 };
@@ -34,6 +35,7 @@ type SalesOrdersTableProps = {
 export function SalesOrdersTable({
   orders,
   canCreate,
+  canManageArchive = false,
   hasFilters = false,
   isArchiveView = false,
 }: SalesOrdersTableProps) {
@@ -110,11 +112,12 @@ export function SalesOrdersTable({
                           <Button>Duplicate</Button>
                         </Link>
                       ) : null}
-                      {isArchiveView ? (
-                        <UnarchiveOrderButton orderId={order.id} orderNumber={order.orderNumber} />
-                      ) : (
-                        <ArchiveOrderButton orderId={order.id} orderNumber={order.orderNumber} />
-                      )}
+                      {canManageArchive && isArchiveView ? (
+                        <UnarchiveOrderButton orderId={order.id} />
+                      ) : null}
+                      {canManageArchive && !isArchiveView && canArchiveSalesOrder(order.status) ? (
+                        <ArchiveOrderButton orderId={order.id} />
+                      ) : null}
                     </div>
                   </div>
                 </td>

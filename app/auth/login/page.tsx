@@ -1,15 +1,12 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AuthLayout from "@/components/auth-layout";
 
-function LoginForm() {
+export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const registered = searchParams.get("registered");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -40,15 +37,11 @@ function LoginForm() {
   return (
     <AuthLayout>
       <h2 className="text-2xl font-semibold text-zinc-900">Welcome back</h2>
-      <p className="mt-1 text-sm text-zinc-500">Sign in to your account</p>
+      <p className="mt-1 text-sm text-zinc-500">
+        Sign in with the account issued by your administrator.
+      </p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-        {registered && (
-          <div className="rounded-md bg-green-50 p-3 text-sm text-green-600">
-            Account created successfully. Please sign in.
-          </div>
-        )}
-
         {error && (
           <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
             {error}
@@ -89,21 +82,6 @@ function LoginForm() {
           {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>
-
-      <p className="mt-6 text-center text-sm text-zinc-500">
-        Don&apos;t have an account?{" "}
-        <Link href="/auth/register" className="font-medium text-zinc-900 hover:underline">
-          Sign up
-        </Link>
-      </p>
     </AuthLayout>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense>
-      <LoginForm />
-    </Suspense>
   );
 }

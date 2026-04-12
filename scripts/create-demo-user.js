@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
@@ -15,7 +16,7 @@ async function main() {
   const existing = await prisma.user.findUnique({ where: { email } });
 
   if (existing) {
-    console.log("User already exists — skipping.");
+    console.log("User already exists - skipping.");
     console.log("  Email   :", email);
     console.log("  Password:", password);
     console.log("  Role    : SALES_STAFF");
@@ -44,3 +45,4 @@ main()
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
+

@@ -7,12 +7,19 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAuthPage = pathname.startsWith("/auth");
+  const isRegisterPage = pathname === "/auth/register";
   const isSelectLocationPage = pathname.startsWith("/auth/select-location");
   const isDashboard = pathname.startsWith("/dashboard");
 
   const token =
     request.cookies.get("authjs.session-token")?.value ||
     request.cookies.get("__Secure-authjs.session-token")?.value;
+
+  if (isRegisterPage) {
+    return NextResponse.redirect(
+      new URL(token ? "/dashboard" : "/auth/login", request.url)
+    );
+  }
 
   if (isSelectLocationPage && !token) {
     return NextResponse.redirect(new URL("/auth/login", request.url));

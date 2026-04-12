@@ -11,61 +11,85 @@ import { Button } from "@/components/ui/button";
 
 export function ArchiveOrderButton({
   orderId,
-  orderNumber,
 }: {
   orderId: string;
-  orderNumber: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
   const router = useRouter();
 
   function handleArchive() {
     startTransition(async () => {
-      await archiveSalesOrderAction(orderId);
-      router.refresh();
+      const response = await archiveSalesOrderAction(orderId);
+      setMessage(response.message);
+      setIsError(response.status === "error");
+
+      if (response.status === "success") {
+        router.refresh();
+      }
     });
   }
 
   return (
-    <Button
-      disabled={isPending}
-      onClick={handleArchive}
-      type="button"
-      variant="outline"
-      className="text-xs"
-    >
-      {isPending ? "Archiving..." : "Archive"}
-    </Button>
+    <div className="space-y-1">
+      <Button
+        disabled={isPending}
+        onClick={handleArchive}
+        type="button"
+        variant="outline"
+        className="text-xs"
+      >
+        {isPending ? "Archiving..." : "Archive"}
+      </Button>
+      {message ? (
+        <p className={`text-xs ${isError ? "text-red-600" : "text-emerald-700"}`}>
+          {message}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
 export function UnarchiveOrderButton({
   orderId,
-  orderNumber,
 }: {
   orderId: string;
-  orderNumber: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
   const router = useRouter();
 
   function handleUnarchive() {
     startTransition(async () => {
-      await unarchiveSalesOrderAction(orderId);
-      router.refresh();
+      const response = await unarchiveSalesOrderAction(orderId);
+      setMessage(response.message);
+      setIsError(response.status === "error");
+
+      if (response.status === "success") {
+        router.refresh();
+      }
     });
   }
 
   return (
-    <Button
-      disabled={isPending}
-      onClick={handleUnarchive}
-      type="button"
-      variant="outline"
-      className="text-xs"
-    >
-      {isPending ? "Restoring..." : "Restore"}
-    </Button>
+    <div className="space-y-1">
+      <Button
+        disabled={isPending}
+        onClick={handleUnarchive}
+        type="button"
+        variant="outline"
+        className="text-xs"
+      >
+        {isPending ? "Restoring..." : "Restore"}
+      </Button>
+      {message ? (
+        <p className={`text-xs ${isError ? "text-red-600" : "text-emerald-700"}`}>
+          {message}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -74,21 +98,25 @@ export function BulkArchiveButton() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [days, setDays] = useState(30);
   const [result, setResult] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
   const router = useRouter();
 
   function handleBulkArchive() {
     startTransition(async () => {
       const response = await bulkArchiveSalesOrdersAction(days);
       setResult(response.message);
+      setIsError(response.status === "error");
       setShowConfirm(false);
-      router.refresh();
+      if (response.status === "success") {
+        router.refresh();
+      }
       setTimeout(() => setResult(null), 4000);
     });
   }
 
   if (result) {
     return (
-      <p className="text-sm text-green-700">{result}</p>
+      <p className={`text-sm ${isError ? "text-red-600" : "text-green-700"}`}>{result}</p>
     );
   }
 

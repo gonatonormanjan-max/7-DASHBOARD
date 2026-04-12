@@ -75,7 +75,7 @@ export default async function PurchaseOrderDetailPage({
         }
       />
 
-      {/* Stock impact banner — shown only after stock has been received */}
+      {/* Stock impact banner - shown only after stock has been received */}
       {isStockUpdated && hasMovements ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
           <p className="text-sm font-semibold text-emerald-800">
@@ -85,15 +85,13 @@ export default async function PurchaseOrderDetailPage({
           <ul className="mt-2 space-y-1">
             {stockImpactEntries.map((entry, i) => (
               <li key={i} className="text-sm text-emerald-700">
-                <span className="font-medium">{entry.productName}</span> — +
-                {entry.totalQty} unit{entry.totalQty !== 1 ? "s" : ""} added to{" "}
+                <span className="font-medium">{entry.productName}</span> +{entry.totalQty} unit
+                {entry.totalQty !== 1 ? "s" : ""} added to{" "}
                 <span className="font-medium">{entry.locationName}</span>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-emerald-600">
-            Full movement history is available below. ↓
-          </p>
+          <p className="mt-2 text-xs text-emerald-600">Full movement history is available below.</p>
         </div>
       ) : null}
 
@@ -206,8 +204,8 @@ export default async function PurchaseOrderDetailPage({
           <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Workflow actions</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Approve this order, receive inventory into a warehouse, or cancel it if it
-              will no longer be fulfilled.
+              Approve this order, open Inventory receiving for warehouse intake, or cancel
+              it if it will no longer be fulfilled.
             </p>
             <div className="mt-4">
               <PurchaseOrderWorkflowActions
@@ -268,8 +266,9 @@ export default async function PurchaseOrderDetailPage({
         </aside>
       </section>
 
-      {/* Movement ledger — collapsible, only visible once stock has moved */}
+      {/* Movement ledger - collapsible, only visible once stock has moved */}
       {hasMovements ? <POMovementLedger movements={movements} /> : null}
     </div>
   );
 }
+

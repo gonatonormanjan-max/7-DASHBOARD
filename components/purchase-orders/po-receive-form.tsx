@@ -79,7 +79,6 @@ export function PurchaseOrderReceiveForm({
     });
   }
 
-  const showStockPreview = warehouseId && !isLoadingStock && Object.keys(stockLevels).length >= 0;
   const hasWarehouseData = warehouseId && !isLoadingStock;
 
   return (
@@ -139,7 +138,7 @@ export function PurchaseOrderReceiveForm({
 
         {isLoadingStock ? (
           <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-500">
-            Loading current stock levels…
+            Loading current stock levels...
           </div>
         ) : null}
 
@@ -247,7 +246,7 @@ export function PurchaseOrderReceiveForm({
                   return (
                     <li key={item.id} className="text-sm text-emerald-700">
                       <span className="font-medium">{item.product.name}</span>:{" "}
-                      {currentStock} → {currentStock + receiveNow}{" "}
+                      {currentStock} {"->"} {currentStock + receiveNow}{" "}
                       <span className="text-emerald-500">(+{receiveNow})</span>
                     </li>
                   );
@@ -266,3 +265,4 @@ export function PurchaseOrderReceiveForm({
     </form>
   );
 }
+

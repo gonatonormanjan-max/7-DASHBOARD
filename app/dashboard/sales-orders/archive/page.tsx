@@ -1,8 +1,10 @@
 import Form from "next/form";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getSalesOrderListData } from "@/lib/dal/sales-orders";
 import { formatCurrency } from "@/lib/products";
+import { canManageSalesOrderArchive } from "@/lib/sales-orders";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { SalesOrdersTable } from "@/components/sales-orders/sales-orders-table";
@@ -22,6 +24,11 @@ export default async function SalesOrdersArchivePage({
   searchParams,
 }: ArchivePageProps) {
   const user = await requirePermission("sales_orders", "read");
+
+  if (!canManageSalesOrderArchive(user.role)) {
+    redirect("/dashboard/sales-orders");
+  }
+
   const activeLocationId = await requireSalesStaffActiveLocationId({
     user,
     returnTo: "/dashboard/sales-orders/archive",
@@ -116,6 +123,7 @@ export default async function SalesOrdersArchivePage({
       </section>
 
       <SalesOrdersTable
+        canManageArchive
         orders={orders}
         canCreate={false}
         hasFilters={hasFilters}

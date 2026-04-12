@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   initialPurchaseOrderFormState,
   type PurchaseOrderFormState,
@@ -116,29 +123,34 @@ export function PurchaseOrderForm({
   const [extraSuppliers, setExtraSuppliers] = useState<SupplierOption[]>([]);
   const processedInlineIdRef = useRef<string | null>(null);
 
-  // Watch for successful inline supplier creation
-  useEffect(() => {
-    if (
-      inlineSupplierState.status === "success" &&
-      inlineSupplierState.createdSupplier &&
-      processedInlineIdRef.current !== inlineSupplierState.createdSupplier.id
-    ) {
-      processedInlineIdRef.current = inlineSupplierState.createdSupplier.id;
-      const newSupplier = inlineSupplierState.createdSupplier;
-      setExtraSuppliers((prev) =>
-        prev.some((s) => s.id === newSupplier.id) ? prev : [...prev, newSupplier]
-      );
-      setSupplierId(newSupplier.id);
-      setIsSupplierModalOpen(false);
+  const syncCreatedSupplier = useEffectEvent((newSupplier: SupplierOption) => {
+    if (processedInlineIdRef.current === newSupplier.id) {
+      return;
     }
-  }, [inlineSupplierState.createdSupplier?.id, inlineSupplierState.status]);
+
+    processedInlineIdRef.current = newSupplier.id;
+    setExtraSuppliers((prev) =>
+      prev.some((supplier) => supplier.id === newSupplier.id)
+        ? prev
+        : [...prev, newSupplier]
+    );
+    setSupplierId(newSupplier.id);
+    setIsSupplierModalOpen(false);
+  });
+
+  // Watch for successful inline supplier creation.
+  useEffect(() => {
+    if (inlineSupplierState.status === "success" && inlineSupplierState.createdSupplier) {
+      syncCreatedSupplier(inlineSupplierState.createdSupplier);
+    }
+  }, [inlineSupplierState.createdSupplier, inlineSupplierState.status]);
 
   const allSuppliers = useMemo(
     () => mergeSupplierOptions(suppliers, extraSuppliers),
     [suppliers, extraSuppliers]
   );
 
-  // Filter products for the search — show ALL products regardless of supplier
+  // Filter products for the search - show ALL products regardless of supplier
   // Cost is auto-populated from supplier link if one exists, else product default
   const isReady = allSuppliers.length > 0 && warehouses.length > 0 && products.length > 0;
   const [productSearch, setProductSearch] = useState<Record<string, string>>({});
@@ -375,7 +387,7 @@ export function PurchaseOrderForm({
                           </option>
                           {filteredProducts.map((product) => (
                             <option key={product.id} value={product.id}>
-                              {product.name} — {product.sku}
+                              {product.name} - {product.sku}
                             </option>
                           ))}
                         </select>
@@ -515,7 +527,7 @@ export function PurchaseOrderForm({
                 onClick={() => setIsSupplierModalOpen(false)}
                 type="button"
               >
-                ✕
+                x
               </button>
             </div>
 
@@ -593,3 +605,4 @@ export function PurchaseOrderForm({
     </>
   );
 }
+

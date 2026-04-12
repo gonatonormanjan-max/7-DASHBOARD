@@ -138,7 +138,8 @@ export default async function InventoryPage() {
                 <div>
                   <h3 className="font-semibold text-slate-950">Receive from Supplier</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Record a new delivery from a supplier and update location stock immediately.
+                    Start warehouse intake from an approved purchase order or record a direct
+                    supplier delivery when no PO exists.
                   </p>
                 </div>
               </div>
@@ -206,7 +207,7 @@ export default async function InventoryPage() {
                 <div>
                   <h3 className="font-semibold text-slate-950">Stock Setup</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Set stock quantities in bulk for a warehouse or branch — ideal for new locations and migrations.
+                    Set stock quantities in bulk for a warehouse or branch - ideal for new locations and migrations.
                   </p>
                 </div>
               </div>
@@ -256,3 +257,4 @@ export default async function InventoryPage() {
     </div>
   );
 }
+

@@ -1,6 +1,13 @@
 import "server-only";
 
-import { LocationType, Prisma, ProductStatus } from "@prisma/client";
+import {
+  LocationType,
+  PaymentMode,
+  Prisma,
+  ProductStatus,
+  SalesOrderStatus,
+  SalesOrderVoidReason,
+} from "@prisma/client";
 import { getAvailableQuantity } from "@/lib/inventory";
 import {
   DEFAULT_PAGE,
@@ -18,6 +25,51 @@ type SalesOrderDataFilters = Partial<SalesOrderListFilters> & {
 };
 type SalesOrderScopeOptions = {
   locationId?: string | null;
+};
+
+type SalesOrderDetailData = {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerEmail: string | null;
+  status: SalesOrderStatus;
+  totalAmount: string;
+  paymentMode: PaymentMode | null;
+  cashAmount: string | null;
+  onlineAmount: string | null;
+  voidReason: SalesOrderVoidReason | null;
+  voidRemarks: string | null;
+  voidDocumentation: string | null;
+  voidedAt: Date | null;
+  notes: string | null;
+  archivedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+  voidedBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  } | null;
+  items: Array<{
+    id: string;
+    quantity: number;
+    unitPrice: string;
+    product: {
+      id: string;
+      name: string;
+      sku: string;
+    };
+    location: {
+      id: string;
+      name: string;
+      type: LocationType;
+    };
+  }>;
 };
 
 function normalizeFilters(filters: SalesOrderDataFilters) {
@@ -220,7 +272,10 @@ export async function getSalesOrderListData(
   };
 }
 
-export async function getSalesOrderById(id: string, options: SalesOrderScopeOptions = {}) {
+export async function getSalesOrderById(
+  id: string,
+  options: SalesOrderScopeOptions = {}
+): Promise<SalesOrderDetailData | null> {
   const order = await prisma.salesOrder.findFirst({
     where: {
       id,

@@ -198,6 +198,50 @@ export async function getPurchaseOrderById(id: string) {
   };
 }
 
+export async function getPurchaseOrdersAwaitingReceipt(limit = 6) {
+  const orders = await prisma.purchaseOrder.findMany({
+    where: {
+      status: {
+        in: ["APPROVED", "PARTIALLY_RECEIVED"],
+      },
+    },
+    orderBy: [{ expectedDate: "asc" }, { createdAt: "asc" }],
+    take: limit,
+    select: {
+      id: true,
+      orderNumber: true,
+      status: true,
+      expectedDate: true,
+      supplier: {
+        select: {
+          name: true,
+        },
+      },
+      items: {
+        select: {
+          quantity: true,
+          receivedQty: true,
+        },
+      },
+    },
+  });
+
+  return orders.map((order) => {
+    const remainingUnits = order.items.reduce(
+      (sum, item) => sum + Math.max(item.quantity - item.receivedQty, 0),
+      0
+    );
+    const remainingLines = order.items.filter((item) => item.receivedQty < item.quantity)
+      .length;
+
+    return {
+      ...order,
+      remainingLines,
+      remainingUnits,
+    };
+  });
+}
+
 export async function getPurchaseOrderMovements(purchaseOrderId: string) {
   return prisma.inventoryMovement.findMany({
     where: {

@@ -21,7 +21,12 @@ import {
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
-import { formatSalesOrderVoidReason } from "@/lib/sales-orders";
+import {
+  SALES_ORDER_ARCHIVEABLE_STATUSES,
+  canArchiveSalesOrder,
+  canManageSalesOrderArchive,
+  formatSalesOrderVoidReason,
+} from "@/lib/sales-orders";
 import {
   extractSalesOrderVoidFormValues,
   extractSalesOrderFormValues,
@@ -63,6 +68,21 @@ type StockRequirement = {
   productName: string;
   sku: string;
   locationName: string;
+};
+
+type SalesStockSnapshot = {
+  quantity: number;
+  reservedQty: number;
+};
+
+type AvailableStockShortage = StockRequirement & {
+  available: number;
+};
+
+type DeliveryBlocker = StockRequirement & {
+  kind: "on_hand" | "reservation";
+  onHand: number;
+  reserved: number;
 };
 
 type PreparedSalesOrderItem = {
@@ -475,12 +495,12 @@ function isOutsideSalesStaffScope(
   return order.items.some((item) => item.locationId !== activeLocationId);
 }
 
-async function findStockShortages(
+async function getStockSnapshotsForRequirements(
   client: Prisma.TransactionClient | typeof prisma,
   requirements: StockRequirement[]
-) {
+): Promise<Map<string, SalesStockSnapshot>> {
   if (requirements.length === 0) {
-    return [];
+    return new Map();
   }
 
   const stockRows = await client.locationStock.findMany({
@@ -499,10 +519,21 @@ async function findStockShortages(
     },
   });
 
-  const stockMap = new Map(
-    stockRows.map((row) => [`${row.productId}:${row.locationId}`, row])
+  return new Map(
+    stockRows.map((row) => [
+      `${row.productId}:${row.locationId}`,
+      {
+        quantity: row.quantity,
+        reservedQty: row.reservedQty,
+      } satisfies SalesStockSnapshot,
+    ])
   );
+}
 
+function findAvailableStockShortages(
+  requirements: StockRequirement[],
+  stockMap: Map<string, SalesStockSnapshot>
+) {
   return requirements
     .map((requirement) => {
       const stock = stockMap.get(`${requirement.productId}:${requirement.locationId}`);
@@ -517,9 +548,53 @@ async function findStockShortages(
       return {
         ...requirement,
         available,
-      };
+      } satisfies AvailableStockShortage;
     })
     .filter((shortage): shortage is NonNullable<typeof shortage> => shortage !== null);
+}
+
+function findDeliveryBlockers(
+  requirements: StockRequirement[],
+  stockMap: Map<string, SalesStockSnapshot>
+) {
+  return requirements
+    .map((requirement) => {
+      const stock = stockMap.get(`${requirement.productId}:${requirement.locationId}`);
+      const onHand = stock?.quantity ?? 0;
+      const reserved = stock?.reservedQty ?? 0;
+
+      if (onHand < requirement.quantity) {
+        return {
+          ...requirement,
+          kind: "on_hand",
+          onHand,
+          reserved,
+        } satisfies DeliveryBlocker;
+      }
+
+      if (reserved < requirement.quantity) {
+        return {
+          ...requirement,
+          kind: "reservation",
+          onHand,
+          reserved,
+        } satisfies DeliveryBlocker;
+      }
+
+      return null;
+    })
+    .filter((blocker): blocker is DeliveryBlocker => blocker !== null);
+}
+
+function buildDeliveryBlockerMessage(blockers: DeliveryBlocker[]) {
+  return [
+    "This order cannot be delivered yet:",
+    ...blockers.map((blocker) =>
+      blocker.kind === "on_hand"
+        ? `${blocker.productName} (${blocker.sku}) at ${blocker.locationName}: needs ${blocker.quantity} on hand, only ${blocker.onHand} recorded.`
+        : `${blocker.productName} (${blocker.sku}) at ${blocker.locationName}: needs ${blocker.quantity} reserved for delivery, only ${blocker.reserved} reserved. Reconfirm stock before delivering.`
+    ),
+  ].join("\n");
 }
 
 /* ------------------------------------------------------------------ */
@@ -529,9 +604,16 @@ async function findStockShortages(
 export async function archiveSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
 
+  if (!canManageSalesOrderArchive(user.role)) {
+    return {
+      status: "error" as const,
+      message: "Only admins and system managers can archive sales orders.",
+    };
+  }
+
   const order = await prisma.salesOrder.findUnique({
     where: { id: orderId },
-    select: { id: true, orderNumber: true, archivedAt: true },
+    select: { id: true, orderNumber: true, archivedAt: true, status: true },
   });
 
   if (!order) {
@@ -540,6 +622,13 @@ export async function archiveSalesOrderAction(orderId: string) {
 
   if (order.archivedAt) {
     return { status: "error" as const, message: "This order is already archived." };
+  }
+
+  if (!canArchiveSalesOrder(order.status)) {
+    return {
+      status: "error" as const,
+      message: "Only completed or cancelled orders can be archived.",
+    };
   }
 
   await prisma.$transaction(async (tx) => {
@@ -566,6 +655,13 @@ export async function archiveSalesOrderAction(orderId: string) {
 
 export async function unarchiveSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
+
+  if (!canManageSalesOrderArchive(user.role)) {
+    return {
+      status: "error" as const,
+      message: "Only admins and system managers can restore archived sales orders.",
+    };
+  }
 
   const order = await prisma.salesOrder.findUnique({
     where: { id: orderId },
@@ -605,6 +701,13 @@ export async function unarchiveSalesOrderAction(orderId: string) {
 export async function bulkArchiveSalesOrdersAction(olderThanDays: number) {
   const user = await requirePermission("sales_orders", "update");
 
+  if (!canManageSalesOrderArchive(user.role)) {
+    return {
+      status: "error" as const,
+      message: "Only admins and system managers can bulk-archive sales orders.",
+    };
+  }
+
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - olderThanDays);
 
@@ -613,6 +716,7 @@ export async function bulkArchiveSalesOrdersAction(olderThanDays: number) {
       where: {
         archivedAt: null,
         createdAt: { lt: cutoff },
+        status: { in: SALES_ORDER_ARCHIVEABLE_STATUSES },
       },
       data: { archivedAt: new Date() },
     });
@@ -894,7 +998,8 @@ export async function createSalesOrderAction(
 
   if (intent !== "draft") {
     const requirements = buildStockRequirements(orderItemsForValidation);
-    const shortages = await findStockShortages(prisma, requirements);
+    const stockSnapshots = await getStockSnapshotsForRequirements(prisma, requirements);
+    const shortages = findAvailableStockShortages(requirements, stockSnapshots);
 
     if (shortages.length > 0) {
       return {
@@ -1105,7 +1210,8 @@ async function runConfirmSalesOrderAction(orderId: string) {
   }
 
   const requirements = buildStockRequirements(order.items as OrderMutationItem[]);
-  const shortages = await findStockShortages(prisma, requirements);
+  const stockSnapshots = await getStockSnapshotsForRequirements(prisma, requirements);
+  const shortages = findAvailableStockShortages(requirements, stockSnapshots);
 
   if (shortages.length > 0) {
     return {
@@ -1181,12 +1287,13 @@ async function runDeliverSalesOrderAction(orderId: string) {
   }
 
   const requirements = buildStockRequirements(order.items as OrderMutationItem[]);
-  const shortages = await findStockShortages(prisma, requirements);
+  const stockSnapshots = await getStockSnapshotsForRequirements(prisma, requirements);
+  const blockers = findDeliveryBlockers(requirements, stockSnapshots);
 
-  if (shortages.length > 0) {
+  if (blockers.length > 0) {
     return {
       status: "error" as const,
-      message: buildStockShortageMessage(shortages),
+      message: buildDeliveryBlockerMessage(blockers),
     };
   }
 

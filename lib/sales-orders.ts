@@ -1,10 +1,15 @@
 import type {
   PaymentMode,
+  Role,
   SalesOrderStatus,
   SalesOrderVoidReason,
 } from "@prisma/client";
 
 export const SALES_ORDER_ENTRY_STATUSES: SalesOrderStatus[] = ["COMPLETED"];
+export const SALES_ORDER_ARCHIVEABLE_STATUSES: SalesOrderStatus[] = [
+  "COMPLETED",
+  "CANCELLED",
+];
 
 export function formatSalesOrderStatus(status: SalesOrderStatus) {
   switch (status) {
@@ -19,6 +24,14 @@ export function formatSalesOrderStatus(status: SalesOrderStatus) {
     case "CANCELLED":
       return "Cancelled";
   }
+}
+
+export function canManageSalesOrderArchive(role: Role) {
+  return role === "ADMIN" || role === "SYSTEM_MANAGER";
+}
+
+export function canArchiveSalesOrder(status: SalesOrderStatus) {
+  return SALES_ORDER_ARCHIVEABLE_STATUSES.includes(status);
 }
 
 export function getSalesOrderStatusBadgeClass(status: SalesOrderStatus) {

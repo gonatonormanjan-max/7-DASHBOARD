@@ -19,6 +19,9 @@ type SupplierReceiptFormProps = {
     state: SupplierReceiptState,
     formData: FormData
   ) => Promise<SupplierReceiptState>;
+  title?: string;
+  description?: string;
+  referencePlaceholder?: string;
   suppliers: Array<{
     id: string;
     name: string;
@@ -59,6 +62,9 @@ function itemFieldError(
 
 export function SupplierReceiptForm({
   action,
+  title = "Supplier receipt",
+  description = "Receive stock from a supplier directly into an active warehouse while preserving a clear movement record for every line.",
+  referencePlaceholder = "PO# or delivery receipt",
   suppliers,
   warehouses,
   allProducts,
@@ -140,10 +146,9 @@ export function SupplierReceiptForm({
 
       <div className="space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm">
         <div>
-          <h2 className="text-lg font-semibold text-slate-950">Supplier receipt</h2>
+          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            Receive stock from a supplier directly into an active warehouse while preserving a
-            clear movement record for every line.
+            {description}
           </p>
         </div>
 
@@ -226,7 +231,7 @@ export function SupplierReceiptForm({
             disabled={!isReady}
             name="referenceNumber"
             onChange={(event) => setReferenceNumber(event.target.value)}
-            placeholder="PO# or delivery receipt"
+            placeholder={referencePlaceholder}
             type="text"
             value={referenceNumber}
           />

@@ -80,8 +80,8 @@ export function PurchaseOrderWorkflowActions({
       ) : null}
 
       {(status === "APPROVED" || status === "PARTIALLY_RECEIVED") && canUpdate ? (
-        <Link href={`/dashboard/purchase-orders/${orderId}/receive`}>
-          <Button>Receive Stock</Button>
+        <Link href={`/dashboard/inventory/receive?purchaseOrderId=${orderId}`}>
+          <Button>Receive in Inventory</Button>
         </Link>
       ) : null}
 
