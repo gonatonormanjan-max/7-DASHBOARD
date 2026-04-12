@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
-import { requirePermission } from "@/lib/dal/auth";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getDashboardData } from "@/lib/dal/dashboard";
 import { hasPermission, type PermissionResource } from "@/lib/permissions";
 
@@ -24,7 +23,7 @@ const roleCopy = {
     eyebrow: "Welcome back",
     title: "Sales Workspace",
     description:
-      "Monitor product availability and record sales orders for your assigned location.",
+      "Monitor product availability and record sales orders for your selected branch.",
   },
 } as const;
 
@@ -128,11 +127,15 @@ function formatLocationCount(count: number, singular: string, plural: string) {
 
 export default async function DashboardPage() {
   const user = await requirePermission("dashboard", "read");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: "/dashboard",
+  });
   const copy = roleCopy[user.role];
   const dashboardData = await getDashboardData(
     user.id,
     user.role,
-    user.assignedLocationId ?? null
+    activeLocationId
   );
   const revenueToday = currencyFormatter.format(dashboardData.revenueToday);
   const warehouses = dashboardData.locationHealth.filter(
@@ -167,7 +170,7 @@ export default async function DashboardPage() {
             />
             <DashboardStatLinkCard
               description={
-                user.assignedLocationId ? "At your assigned location" : "Across all locations"
+                activeLocationId ? "At your selected branch today" : "Select a branch to continue"
               }
               href="/dashboard/inventory"
               label="Low Stock"

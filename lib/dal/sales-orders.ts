@@ -16,6 +16,9 @@ type SalesOrderDataFilters = Partial<SalesOrderListFilters> & {
   archived?: boolean;
   window?: LegacyWindowFilter;
 };
+type SalesOrderScopeOptions = {
+  locationId?: string | null;
+};
 
 function normalizeFilters(filters: SalesOrderDataFilters) {
   return {
@@ -66,6 +69,7 @@ function buildSalesOrderWhere(
   filters: SalesOrderDataFilters,
   options: {
     ignoreStatus?: boolean;
+    locationId?: string | null;
   } = {}
 ): Prisma.SalesOrderWhereInput {
   const normalizedFilters = normalizeFilters(filters);
@@ -104,13 +108,34 @@ function buildSalesOrderWhere(
     });
   }
 
+  if (options.locationId) {
+    clauses.push({
+      items: {
+        some: { locationId: options.locationId },
+        none: {
+          locationId: {
+            not: options.locationId,
+          },
+        },
+      },
+    });
+  }
+
   return clauses.length === 1 ? clauses[0] : { AND: clauses };
 }
 
-export async function getSalesOrderListData(filters: SalesOrderDataFilters) {
+export async function getSalesOrderListData(
+  filters: SalesOrderDataFilters,
+  options: SalesOrderScopeOptions = {}
+) {
   const normalizedFilters = normalizeFilters(filters);
-  const where = buildSalesOrderWhere(normalizedFilters);
-  const summaryWhere = buildSalesOrderWhere(normalizedFilters, { ignoreStatus: true });
+  const where = buildSalesOrderWhere(normalizedFilters, {
+    locationId: options.locationId,
+  });
+  const summaryWhere = buildSalesOrderWhere(normalizedFilters, {
+    ignoreStatus: true,
+    locationId: options.locationId,
+  });
   const totalCount = await prisma.salesOrder.count({ where });
   const pagination = getPaginationMeta(
     normalizedFilters.page ?? DEFAULT_PAGE,
@@ -195,9 +220,23 @@ export async function getSalesOrderListData(filters: SalesOrderDataFilters) {
   };
 }
 
-export async function getSalesOrderById(id: string) {
-  const order = await prisma.salesOrder.findUnique({
-    where: { id },
+export async function getSalesOrderById(id: string, options: SalesOrderScopeOptions = {}) {
+  const order = await prisma.salesOrder.findFirst({
+    where: {
+      id,
+      ...(options.locationId
+        ? {
+            items: {
+              some: { locationId: options.locationId },
+              none: {
+                locationId: {
+                  not: options.locationId,
+                },
+              },
+            },
+          }
+        : {}),
+    },
     select: {
       id: true,
       orderNumber: true,
@@ -208,11 +247,22 @@ export async function getSalesOrderById(id: string) {
       paymentMode: true,
       cashAmount: true,
       onlineAmount: true,
+      voidReason: true,
+      voidRemarks: true,
+      voidDocumentation: true,
+      voidedAt: true,
       notes: true,
       archivedAt: true,
       createdAt: true,
       updatedAt: true,
       createdBy: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+      voidedBy: {
         select: {
           id: true,
           firstName: true,
@@ -258,10 +308,14 @@ export async function getSalesOrderById(id: string) {
   };
 }
 
-export async function getSalesOrderFormOptions() {
+export async function getSalesOrderFormOptions(options: SalesOrderScopeOptions = {}) {
   const [locations, products, stockRows] = await Promise.all([
     prisma.stockLocation.findMany({
-      where: { isActive: true, type: LocationType.BRANCH },
+      where: {
+        isActive: true,
+        type: LocationType.BRANCH,
+        ...(options.locationId ? { id: options.locationId } : {}),
+      },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -281,7 +335,11 @@ export async function getSalesOrderFormOptions() {
     }),
     prisma.locationStock.findMany({
       where: {
-        location: { isActive: true, type: LocationType.BRANCH },
+        location: {
+          isActive: true,
+          type: LocationType.BRANCH,
+          ...(options.locationId ? { id: options.locationId } : {}),
+        },
         product: { status: ProductStatus.ACTIVE },
       },
       select: {

@@ -1,20 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import {
   initialUserFormState,
   type UserFormState,
 } from "@/lib/validators/users";
 import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
-
-type LocationOption = {
-  id: string;
-  name: string;
-  code: string;
-  type: string;
-};
 
 type UserFormProps = {
   action: (state: UserFormState, formData: FormData) => Promise<UserFormState>;
@@ -23,7 +16,6 @@ type UserFormProps = {
     value: string;
     label: string;
   }>;
-  locations: LocationOption[];
   user?: {
     id: string;
     firstName: string;
@@ -31,7 +23,6 @@ type UserFormProps = {
     email: string;
     role: string;
     isActive: boolean;
-    assignedLocationId: string | null;
   };
   isSelf?: boolean;
 };
@@ -48,15 +39,10 @@ export function UserForm({
   action,
   mode,
   roleOptions,
-  locations,
   user,
   isSelf = false,
 }: UserFormProps) {
   const [state, formAction] = useActionState(action, initialUserFormState);
-  const [selectedRole, setSelectedRole] = useState(
-    state.values?.role ?? user?.role ?? roleOptions[0]?.value ?? ""
-  );
-  const isSalesStaff = selectedRole === "SALES_STAFF";
 
   return (
     <form action={formAction} className="space-y-6">
@@ -120,7 +106,6 @@ export function UserForm({
             defaultValue={fieldValue(state, "role", user?.role ?? roleOptions[0]?.value)}
             disabled={isSelf}
             name="role"
-            onChange={(e) => setSelectedRole(e.target.value)}
           >
             {roleOptions.map((role) => (
               <option key={role.value} value={role.value}>
@@ -199,32 +184,6 @@ export function UserForm({
             </p>
           ) : null}
         </label>
-
-        {isSalesStaff ? (
-          <label className="block space-y-2 lg:col-span-2">
-            <span className="text-sm font-medium text-slate-700">Assigned location</span>
-            <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
-              defaultValue={fieldValue(state, "assignedLocationId", user?.assignedLocationId ?? "")}
-              name="assignedLocationId"
-            >
-              <option value="">No location assigned</option>
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name} ({loc.code})
-                </option>
-              ))}
-            </select>
-            <p className="text-sm text-slate-500">
-              Cashiers are locked to their assigned location when recording sales. Leave unset if this staff member covers multiple locations.
-            </p>
-            {state.fieldErrors?.assignedLocationId ? (
-              <p className="text-sm text-destructive">{state.fieldErrors.assignedLocationId[0]}</p>
-            ) : null}
-          </label>
-        ) : (
-          <input name="assignedLocationId" type="hidden" value="" />
-        )}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">

@@ -96,6 +96,13 @@ export async function createPurchaseOrderAction(
 ): Promise<PurchaseOrderFormState> {
   const user = await requirePermission("purchase_orders", "create");
   const values = extractPurchaseOrderFormValues(formData);
+  const formValues = {
+    supplierId: values.supplierId,
+    locationId: values.locationId,
+    expectedDate: values.expectedDate,
+    notes: values.notes,
+    itemsPayload: values.itemsPayload,
+  };
 
   if (values.items === null) {
     return {
@@ -106,7 +113,7 @@ export async function createPurchaseOrderAction(
         items: ["We could not read the line items. Please try again."],
         itemsPayload: ["We could not read the line items. Please try again."],
       },
-      values,
+      values: formValues,
     };
   }
 
@@ -135,7 +142,7 @@ export async function createPurchaseOrderAction(
       message: "Please fix the purchase order details.",
       fieldErrors,
       itemErrors: itemErrors.some(Boolean) ? itemErrors : undefined,
-      values,
+      values: formValues,
     };
   }
 
@@ -167,7 +174,7 @@ export async function createPurchaseOrderAction(
       status: "error",
       message: "Select an active supplier.",
       fieldErrors: { supplierId: ["Select an active supplier."] },
-      values,
+      values: formValues,
     };
   }
 
@@ -176,7 +183,7 @@ export async function createPurchaseOrderAction(
       status: "error",
       message: "Select an active warehouse.",
       fieldErrors: { locationId: ["Select an active warehouse."] },
-      values,
+      values: formValues,
     };
   }
 
@@ -185,7 +192,7 @@ export async function createPurchaseOrderAction(
       status: "error",
       message: "One or more selected products are no longer available.",
       fieldErrors: { items: ["Select valid products for every line item."] },
-      values,
+      values: formValues,
     };
   }
 

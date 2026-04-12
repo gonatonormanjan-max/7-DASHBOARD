@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { requirePermission } from "@/lib/dal/auth";
+import { notFound, redirect } from "next/navigation";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getInventoryPageData } from "@/lib/dal/inventory";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { hasPermission } from "@/lib/permissions";
@@ -63,6 +63,15 @@ export default async function LocationInventoryPage({
 }: LocationInventoryPageProps) {
   const user = await requirePermission("inventory", "read");
   const [{ locationId }, rawSearchParams] = await Promise.all([params, searchParams]);
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: `/dashboard/inventory/${locationId}`,
+  });
+
+  if (user.role === "SALES_STAFF" && activeLocationId && locationId !== activeLocationId) {
+    redirect(`/dashboard/inventory/${activeLocationId}`);
+  }
+
   const tab = parseInventoryTab(rawSearchParams);
   const filters = parseInventoryFilters(rawSearchParams);
   const canManage = hasPermission(user.role, "inventory", "update");
@@ -163,9 +172,11 @@ export default async function LocationInventoryPage({
         title="Inventory"
         description={description}
         action={
-          <Link href="/dashboard/inventory">
-            <Button variant="outline">All Locations</Button>
-          </Link>
+          user.role !== "SALES_STAFF" ? (
+            <Link href="/dashboard/inventory">
+              <Button variant="outline">All Locations</Button>
+            </Link>
+          ) : null
         }
       />
 

@@ -309,14 +309,21 @@ export async function getStockSetupLocations() {
   });
 }
 
-export async function getInventoryLandingData() {
+export async function getInventoryLandingData(options?: {
+  locationId?: string | null;
+}) {
+  const locationId = options?.locationId?.trim() || undefined;
   const [locations, stockRows] = await Promise.all([
     prisma.stockLocation.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        ...(locationId ? { id: locationId } : {}),
+      },
       orderBy: [{ type: "asc" }, { name: "asc" }],
       select: { id: true, name: true, code: true, type: true },
     }),
     prisma.locationStock.findMany({
+      where: locationId ? { locationId } : undefined,
       select: {
         locationId: true,
         quantity: true,

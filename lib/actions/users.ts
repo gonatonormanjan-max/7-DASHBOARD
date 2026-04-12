@@ -38,7 +38,6 @@ function buildChangedFields(
     email: string;
     role: string;
     isActive: boolean;
-    assignedLocationId: string | null;
   },
   nextUser: {
     firstName: string;
@@ -46,7 +45,6 @@ function buildChangedFields(
     email: string;
     role: string;
     isActive: boolean;
-    assignedLocationId: string | null;
   },
   passwordChanged: boolean
 ) {
@@ -57,7 +55,6 @@ function buildChangedFields(
   if (currentUser.email !== nextUser.email) changedFields.push("email");
   if (currentUser.role !== nextUser.role) changedFields.push("role");
   if (currentUser.isActive !== nextUser.isActive) changedFields.push("isActive");
-  if (currentUser.assignedLocationId !== nextUser.assignedLocationId) changedFields.push("assignedLocationId");
   if (passwordChanged) changedFields.push("password");
 
   return changedFields;
@@ -117,7 +114,7 @@ export async function createUserAction(
         hashedPassword,
         role: parsed.data.role,
         isActive: parsed.data.isActive,
-        assignedLocationId: parsed.data.role === "SALES_STAFF" ? parsed.data.assignedLocationId : null,
+        assignedLocationId: null,
       },
       select: {
         id: true,
@@ -176,7 +173,6 @@ export async function updateUserAction(
       email: true,
       role: true,
       isActive: true,
-      assignedLocationId: true,
     },
   });
 
@@ -245,7 +241,7 @@ export async function updateUserAction(
         email: parsed.data.email,
         role: parsed.data.role,
         isActive: parsed.data.isActive,
-        assignedLocationId: parsed.data.role === "SALES_STAFF" ? parsed.data.assignedLocationId : null,
+        assignedLocationId: null,
         ...(hashedPassword ? { hashedPassword } : {}),
       },
     });

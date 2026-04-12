@@ -4,6 +4,8 @@ import { Prisma, type MovementType, type SalesOrderStatus } from "@prisma/client
 import {
   COST_SHOCK_ESCALATION_THRESHOLD,
   COST_SHOCK_WARNING_THRESHOLD,
+  isCostingPersistenceAvailable,
+  isMissingCostingTableError,
   MOVING_AVERAGE_VALUATION_METHOD,
 } from "@/lib/costing";
 import { prisma } from "@/lib/prisma";
@@ -74,6 +76,9 @@ type BranchComparisonRow = {
 type BranchSeries = {
   data: Array<Record<string, string | number>>;
   branches: string[];
+};
+type ReportsScopeOptions = {
+  locationId?: string | null;
 };
 
 export type QuotaMetric = "revenue" | "units";
@@ -172,6 +177,10 @@ function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
 function getWindowStart(days: number) {
   const safeDays = Math.max(1, Math.floor(days));
   const date = new Date();
@@ -181,7 +190,11 @@ function getWindowStart(days: number) {
 }
 
 function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function toMonthKey(date: Date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
 }
 
 function buildDateRange(startDate: Date): string[] {
@@ -216,6 +229,11 @@ function getSalesStatusWhere() {
   } as const;
 }
 
+function normalizeScopeLocationId(locationId?: string | null) {
+  const normalized = locationId?.trim();
+  return normalized ? normalized : null;
+}
+
 function getReportConfidence(input: {
   totalSalesLines: number;
   estimatedCostLineCount: number;
@@ -238,50 +256,67 @@ function getReportConfidence(input: {
 }
 
 async function getSalesTrendData(
-  days: number = REPORT_OVERVIEW_WINDOW_DAYS
+  days: number = REPORT_OVERVIEW_WINDOW_DAYS,
+  locationId?: string | null
 ): Promise<SalesTrendPoint[]> {
   const since = getWindowStart(days);
 
-  const orders = await prisma.salesOrder.findMany({
+  const salesItems = await prisma.salesOrderItem.findMany({
     where: {
-      createdAt: { gte: since },
-      status: getSalesStatusWhere(),
+      ...(locationId ? { locationId } : {}),
+      salesOrder: {
+        createdAt: { gte: since },
+        status: getSalesStatusWhere(),
+      },
     },
     select: {
-      totalAmount: true,
-      createdAt: true,
-      items: {
+      quantity: true,
+      unitPrice: true,
+      salesOrderId: true,
+      salesOrder: {
         select: {
-          quantity: true,
+          createdAt: true,
         },
       },
     },
   });
 
-  const byDate = new Map<string, { revenue: number; orderCount: number; unitsSold: number }>();
+  const byDate = new Map<
+    string,
+    {
+      revenue: number;
+      unitsSold: number;
+      orderIds: Set<string>;
+    }
+  >();
 
-  for (const order of orders) {
-    const key = toDateKey(order.createdAt);
-    const existing = byDate.get(key) ?? { revenue: 0, orderCount: 0, unitsSold: 0 };
-    existing.revenue += order.totalAmount.toNumber();
-    existing.orderCount += 1;
-    existing.unitsSold += order.items.reduce((sum, item) => sum + item.quantity, 0);
+  for (const item of salesItems) {
+    const key = toDateKey(item.salesOrder.createdAt);
+    const existing = byDate.get(key) ?? {
+      revenue: 0,
+      unitsSold: 0,
+      orderIds: new Set<string>(),
+    };
+    existing.revenue += item.quantity * item.unitPrice.toNumber();
+    existing.unitsSold += item.quantity;
+    existing.orderIds.add(item.salesOrderId);
     byDate.set(key, existing);
   }
 
   return buildDateRange(since).map((date) => ({
     date,
     revenue: roundCurrency(byDate.get(date)?.revenue ?? 0),
-    orderCount: byDate.get(date)?.orderCount ?? 0,
+    orderCount: byDate.get(date)?.orderIds.size ?? 0,
     unitsSold: byDate.get(date)?.unitsSold ?? 0,
   }));
 }
 
-async function getSalesItemAnalytics(days?: number) {
+async function getSalesItemAnalytics(days?: number, locationId?: string | null) {
   const since = typeof days === "number" ? getWindowStart(days) : undefined;
 
   const items = await prisma.salesOrderItem.findMany({
     where: {
+      ...(locationId ? { locationId } : {}),
       salesOrder: {
         status: getSalesStatusWhere(),
         ...(since ? { createdAt: { gte: since } } : {}),
@@ -346,11 +381,15 @@ async function getSalesItemAnalytics(days?: number) {
   return { revenueByCategory, topProducts };
 }
 
-async function getFinancialSummary(days: number): Promise<FinancialSummary> {
+async function getFinancialSummary(
+  days: number,
+  locationId?: string | null
+): Promise<FinancialSummary> {
   const since = getWindowStart(days);
 
   const salesItems = await prisma.salesOrderItem.findMany({
     where: {
+      ...(locationId ? { locationId } : {}),
       salesOrder: {
         createdAt: { gte: since },
         status: getSalesStatusWhere(),
@@ -393,33 +432,55 @@ async function getFinancialSummary(days: number): Promise<FinancialSummary> {
   };
 }
 
-async function getCostShockSummary(days: number) {
+async function getCostShockSummary(days: number, locationId?: string | null) {
   const since = getWindowStart(days);
   const warningThreshold = new Prisma.Decimal(COST_SHOCK_WARNING_THRESHOLD);
   const escalationThreshold = new Prisma.Decimal(COST_SHOCK_ESCALATION_THRESHOLD);
   const negativeWarningThreshold = new Prisma.Decimal(-COST_SHOCK_WARNING_THRESHOLD);
   const negativeEscalationThreshold = new Prisma.Decimal(-COST_SHOCK_ESCALATION_THRESHOLD);
 
-  const [warningCount, escalationCount] = await Promise.all([
-    prisma.productCostHistory.count({
-      where: {
-        createdAt: { gte: since },
-        OR: [
-          { changePct: { gte: warningThreshold } },
-          { changePct: { lte: negativeWarningThreshold } },
-        ],
-      },
-    }),
-    prisma.productCostHistory.count({
-      where: {
-        createdAt: { gte: since },
-        OR: [
-          { changePct: { gte: escalationThreshold } },
-          { changePct: { lte: negativeEscalationThreshold } },
-        ],
-      },
-    }),
-  ]);
+  if (!(await isCostingPersistenceAvailable(prisma))) {
+    return {
+      warningCount: 0,
+      escalationCount: 0,
+    };
+  }
+
+  let warningCount = 0;
+  let escalationCount = 0;
+
+  try {
+    [warningCount, escalationCount] = await Promise.all([
+      prisma.productCostHistory.count({
+        where: {
+          createdAt: { gte: since },
+          ...(locationId ? { locationId } : {}),
+          OR: [
+            { changePct: { gte: warningThreshold } },
+            { changePct: { lte: negativeWarningThreshold } },
+          ],
+        },
+      }),
+      prisma.productCostHistory.count({
+        where: {
+          createdAt: { gte: since },
+          ...(locationId ? { locationId } : {}),
+          OR: [
+            { changePct: { gte: escalationThreshold } },
+            { changePct: { lte: negativeEscalationThreshold } },
+          ],
+        },
+      }),
+    ]);
+  } catch (error) {
+    if (!isMissingCostingTableError(error)) {
+      throw error;
+    }
+    return {
+      warningCount: 0,
+      escalationCount: 0,
+    };
+  }
 
   return {
     warningCount,
@@ -452,9 +513,10 @@ function buildMetricContext(input: {
   };
 }
 
-async function getInventoryHealthSnapshot() {
+async function getInventoryHealthSnapshot(locationId?: string | null) {
   const stockRows = await prisma.locationStock.findMany({
     where: {
+      ...(locationId ? { locationId } : {}),
       product: { status: "ACTIVE" },
     },
     select: {
@@ -544,12 +606,13 @@ const MOVEMENT_TYPES: MovementType[] = [
   "DAMAGED_LOST",
 ];
 
-async function getStockMovementTrends(days: number) {
+async function getStockMovementTrends(days: number, locationId?: string | null) {
   const since = getWindowStart(days);
 
   const movements = await prisma.inventoryMovement.findMany({
     where: {
       createdAt: { gte: since },
+      ...(locationId ? { locationId } : {}),
     },
     select: {
       type: true,
@@ -580,12 +643,23 @@ async function getStockMovementTrends(days: number) {
   });
 }
 
-async function getOrderStatusDistribution(days?: number) {
+async function getOrderStatusDistribution(days?: number, locationId?: string | null) {
   const since = typeof days === "number" ? getWindowStart(days) : undefined;
 
   const distribution = await prisma.salesOrder.groupBy({
     by: ["status"],
-    where: since ? { createdAt: { gte: since } } : undefined,
+    where: {
+      ...(since ? { createdAt: { gte: since } } : {}),
+      ...(locationId
+        ? {
+            items: {
+              some: {
+                locationId,
+              },
+            },
+          }
+        : {}),
+    },
     _count: { _all: true },
   });
 
@@ -595,10 +669,10 @@ async function getOrderStatusDistribution(days?: number) {
   }));
 }
 
-async function getLocationUtilization() {
+async function getLocationUtilization(locationId?: string | null) {
   const stockRows = await prisma.locationStock.findMany({
     where: {
-      location: { isActive: true },
+      location: { isActive: true, ...(locationId ? { id: locationId } : {}) },
     },
     select: {
       quantity: true,
@@ -650,12 +724,15 @@ async function getLocationUtilization() {
 /*  Branch (Warehouse) Analytics — uses ALL orders incl. archived      */
 /* ------------------------------------------------------------------ */
 
-async function getRevenueByBranchOverTime(days: number): Promise<BranchSeries> {
+async function getRevenueByBranchOverTime(
+  days: number,
+  locationId?: string | null
+): Promise<BranchSeries> {
   const since = getWindowStart(days);
 
   const items = await prisma.salesOrderItem.findMany({
     where: {
-      location: { type: "BRANCH" },
+      location: { type: "BRANCH", ...(locationId ? { id: locationId } : {}) },
       salesOrder: {
         status: getSalesStatusWhere(),
         createdAt: { gte: since },
@@ -710,12 +787,12 @@ async function getRevenueByBranchOverTime(days: number): Promise<BranchSeries> {
   return { data, branches: branches.map((b) => b.name) };
 }
 
-async function getBranchComparison(days?: number) {
+async function getBranchComparison(days?: number, locationId?: string | null) {
   const since = typeof days === "number" ? getWindowStart(days) : undefined;
 
   const items = await prisma.salesOrderItem.findMany({
     where: {
-      location: { type: "BRANCH" },
+      location: { type: "BRANCH", ...(locationId ? { id: locationId } : {}) },
       salesOrder: {
         status: getSalesStatusWhere(),
         ...(since ? { createdAt: { gte: since } } : {}),
@@ -798,10 +875,10 @@ async function getBranchComparison(days?: number) {
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
 
-async function getSeasonalTrends(): Promise<BranchSeries> {
+async function getSeasonalTrends(locationId?: string | null): Promise<BranchSeries> {
   const items = await prisma.salesOrderItem.findMany({
     where: {
-      location: { type: "BRANCH" },
+      location: { type: "BRANCH", ...(locationId ? { id: locationId } : {}) },
       salesOrder: {
         status: getSalesStatusWhere(),
       },
@@ -822,7 +899,7 @@ async function getSeasonalTrends(): Promise<BranchSeries> {
   const locationNames = new Map<string, string>();
 
   for (const item of items) {
-    const month = item.salesOrder.createdAt.toISOString().slice(0, 7);
+    const month = toMonthKey(item.salesOrder.createdAt);
     const branchId = item.location.id;
     const revenue = item.quantity * item.unitPrice.toNumber();
 
@@ -855,11 +932,14 @@ async function getSeasonalTrends(): Promise<BranchSeries> {
   return { data, branches: branches.map((b) => b.name) };
 }
 
-export async function getReportsOverviewData(): Promise<ReportsOverviewData> {
+export async function getReportsOverviewData(
+  options: ReportsScopeOptions = {}
+): Promise<ReportsOverviewData> {
+  const scopedLocationId = normalizeScopeLocationId(options.locationId);
   const [salesTrend, financialSummary, costShockSummary] = await Promise.all([
-    getSalesTrendData(REPORT_OVERVIEW_WINDOW_DAYS),
-    getFinancialSummary(REPORT_OVERVIEW_WINDOW_DAYS),
-    getCostShockSummary(REPORT_OVERVIEW_WINDOW_DAYS),
+    getSalesTrendData(REPORT_OVERVIEW_WINDOW_DAYS, scopedLocationId),
+    getFinancialSummary(REPORT_OVERVIEW_WINDOW_DAYS, scopedLocationId),
+    getCostShockSummary(REPORT_OVERVIEW_WINDOW_DAYS, scopedLocationId),
   ]);
 
   const highestDay = salesTrend
@@ -902,9 +982,11 @@ export async function getReportsOverviewData(): Promise<ReportsOverviewData> {
 }
 
 export async function getReportsAnalyticsData(
-  days: number = DEFAULT_ANALYTICS_WINDOW_DAYS
+  days: number = DEFAULT_ANALYTICS_WINDOW_DAYS,
+  options: ReportsScopeOptions = {}
 ): Promise<ReportsAnalyticsData> {
   const analyticsDays = Math.max(1, Math.floor(days));
+  const scopedLocationId = normalizeScopeLocationId(options.locationId);
   const [
     salesTrend,
     financialSummary,
@@ -918,17 +1000,17 @@ export async function getReportsAnalyticsData(
     seasonalTrends,
     costShockSummary,
   ] = await Promise.all([
-    getSalesTrendData(analyticsDays),
-    getFinancialSummary(analyticsDays),
-    getSalesItemAnalytics(analyticsDays),
-    getInventoryHealthSnapshot(),
-    getStockMovementTrends(analyticsDays),
-    getOrderStatusDistribution(analyticsDays),
-    getLocationUtilization(),
-    getRevenueByBranchOverTime(analyticsDays),
-    getBranchComparison(analyticsDays),
-    getSeasonalTrends(),
-    getCostShockSummary(analyticsDays),
+    getSalesTrendData(analyticsDays, scopedLocationId),
+    getFinancialSummary(analyticsDays, scopedLocationId),
+    getSalesItemAnalytics(analyticsDays, scopedLocationId),
+    getInventoryHealthSnapshot(scopedLocationId),
+    getStockMovementTrends(analyticsDays, scopedLocationId),
+    getOrderStatusDistribution(analyticsDays, scopedLocationId),
+    getLocationUtilization(scopedLocationId),
+    getRevenueByBranchOverTime(analyticsDays, scopedLocationId),
+    getBranchComparison(analyticsDays, scopedLocationId),
+    getSeasonalTrends(scopedLocationId),
+    getCostShockSummary(analyticsDays, scopedLocationId),
   ]);
 
   return {
@@ -959,13 +1041,16 @@ export async function getReportsQuotaData({
   days = DEFAULT_QUOTA_WINDOW_DAYS,
   metric = "revenue",
   target = null,
+  locationId = null,
 }: {
   days?: number;
   metric?: QuotaMetric;
   target?: number | null;
+  locationId?: string | null;
 } = {}): Promise<ReportsQuotaData> {
   const quotaDays = Math.max(1, Math.floor(days));
   const normalizedTarget = target && target > 0 ? target : null;
+  const scopedLocationId = normalizeScopeLocationId(locationId);
   const since = getWindowStart(quotaDays);
 
   const [branches, items] = await Promise.all([
@@ -973,6 +1058,7 @@ export async function getReportsQuotaData({
       where: {
         type: "BRANCH",
         isActive: true,
+        ...(scopedLocationId ? { id: scopedLocationId } : {}),
       },
       select: {
         id: true,
@@ -985,7 +1071,10 @@ export async function getReportsQuotaData({
     }),
     prisma.salesOrderItem.findMany({
       where: {
-        location: { type: "BRANCH" },
+        location: {
+          type: "BRANCH",
+          ...(scopedLocationId ? { id: scopedLocationId } : {}),
+        },
         salesOrder: {
           status: getSalesStatusWhere(),
           createdAt: { gte: since },

@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getMovementTypeLabel } from "@/lib/inventory";
 import { hasPermission } from "@/lib/permissions";
-import { requirePermission } from "@/lib/dal/auth";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getLocationById } from "@/lib/dal/locations";
 import { Button } from "@/components/ui/button";
 import { DetailField } from "@/components/ui/detail-field";
@@ -47,6 +47,15 @@ function getMovementBadgeClass(type: string) {
 export default async function LocationDetailPage({ params }: LocationDetailPageProps) {
   const user = await requirePermission("locations", "read");
   const { id } = await params;
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: `/dashboard/locations/${id}`,
+  });
+
+  if (user.role === "SALES_STAFF" && activeLocationId && id !== activeLocationId) {
+    redirect(`/dashboard/locations/${activeLocationId}`);
+  }
+
   const location = await getLocationById(id);
 
   if (!location) {

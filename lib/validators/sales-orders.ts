@@ -4,6 +4,12 @@ import { paginationQuerySchema } from "@/lib/pagination";
 export const WALK_IN_CUSTOMER_NAME = "Walk-in Customer";
 export const SALES_ORDER_PAYMENT_MODES = ["CASH", "ONLINE", "MIXED"] as const;
 export const SALES_ORDER_INTENTS = ["draft", "record", "record_and_new"] as const;
+export const SALES_ORDER_VOID_REASONS = [
+  "DEFECT",
+  "RETURNED_REFUND",
+  "REPLACE",
+  "OTHERS",
+] as const;
 
 function firstString(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -84,6 +90,13 @@ export type SalesOrderFormState = {
   values?: Record<string, string>;
 };
 
+export type SalesOrderVoidFormState = {
+  status: "idle" | "success" | "error";
+  message?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  values?: Record<string, string>;
+};
+
 export type ExtractedSalesOrderFormValues = {
   locationId: string;
   customerName: string;
@@ -102,6 +115,27 @@ export type ExtractedSalesOrderFormValues = {
 export const initialSalesOrderFormState: SalesOrderFormState = {
   status: "idle",
 };
+
+export const initialSalesOrderVoidFormState: SalesOrderVoidFormState = {
+  status: "idle",
+};
+
+export const salesOrderVoidFormSchema = z.object({
+  orderId: z.string().uuid("Invalid sales order."),
+  voidReason: z.enum(SALES_ORDER_VOID_REASONS, {
+    error: "Select a valid return reason.",
+  }),
+  voidRemarks: z
+    .string()
+    .trim()
+    .min(5, "Add a remark with at least 5 characters.")
+    .max(500, "Remarks must be 500 characters or fewer."),
+  voidDocumentation: z
+    .string()
+    .trim()
+    .min(3, "Add documentation or reference details.")
+    .max(500, "Documentation must be 500 characters or fewer."),
+});
 
 export function parseSalesOrderListFilters(
   searchParams: Record<string, string | string[] | undefined>
@@ -147,5 +181,14 @@ export function extractSalesOrderFormValues(
     onlineAmount: String(formData.get("onlineAmount") ?? ""),
     customerMode: String(formData.get("customerMode") ?? ""),
     defaultLocationId,
+  };
+}
+
+export function extractSalesOrderVoidFormValues(formData: FormData) {
+  return {
+    orderId: String(formData.get("orderId") ?? "").trim(),
+    voidReason: String(formData.get("voidReason") ?? "").trim(),
+    voidRemarks: String(formData.get("voidRemarks") ?? "").trim(),
+    voidDocumentation: String(formData.get("voidDocumentation") ?? "").trim(),
   };
 }

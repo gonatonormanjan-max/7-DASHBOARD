@@ -34,6 +34,22 @@ function revalidateProductPaths(productId?: string) {
   }
 }
 
+function resolveProductActionReturnTo(returnTo?: string) {
+  if (typeof returnTo === "string" && returnTo.trim().length > 0) {
+    return returnTo;
+  }
+
+  return "/dashboard/products";
+}
+
+function redirectProductActionError(returnTo: string | undefined, message: string): never {
+  redirect(
+    withFlashMessage(resolveProductActionReturnTo(returnTo), {
+      error: message,
+    })
+  );
+}
+
 async function validateProductRelations(
   categoryId: string,
   brandId: string | null
@@ -562,7 +578,7 @@ export async function updateProductAction(
   redirect(`/dashboard/products/${productId}`);
 }
 
-export async function archiveProductAction(productId: string, returnTo?: string) {
+export async function archiveProductAction(productId: string, returnTo?: string): Promise<void> {
   const user = await requirePermission("products", "update");
 
   const product = await prisma.product.findUnique({
@@ -571,11 +587,11 @@ export async function archiveProductAction(productId: string, returnTo?: string)
   });
 
   if (!product) {
-    return { status: "error" as const, message: "Product not found." };
+    redirectProductActionError(returnTo, "Product not found.");
   }
 
   if (product.status === ProductStatus.ARCHIVED) {
-    return { status: "error" as const, message: "Product is already archived." };
+    redirectProductActionError(returnTo, "Product is already archived.");
   }
 
   await prisma.$transaction(async (tx) => {
@@ -597,13 +613,14 @@ export async function archiveProductAction(productId: string, returnTo?: string)
   });
 
   revalidateProductPaths(productId);
-
-  if (returnTo) {
-    redirect(returnTo);
-  }
+  redirect(
+    withFlashMessage(resolveProductActionReturnTo(returnTo), {
+      success: `${product.name} archived.`,
+    })
+  );
 }
 
-export async function deactivateProductAction(productId: string, returnTo?: string) {
+export async function deactivateProductAction(productId: string, returnTo?: string): Promise<void> {
   const user = await requirePermission("products", "update");
 
   const product = await prisma.product.findUnique({
@@ -612,11 +629,11 @@ export async function deactivateProductAction(productId: string, returnTo?: stri
   });
 
   if (!product) {
-    return { status: "error" as const, message: "Product not found." };
+    redirectProductActionError(returnTo, "Product not found.");
   }
 
   if (product.status !== ProductStatus.ACTIVE) {
-    return { status: "error" as const, message: "Only active products can be deactivated." };
+    redirectProductActionError(returnTo, "Only active products can be deactivated.");
   }
 
   await prisma.$transaction(async (tx) => {
@@ -638,13 +655,14 @@ export async function deactivateProductAction(productId: string, returnTo?: stri
   });
 
   revalidateProductPaths(productId);
-
-  if (returnTo) {
-    redirect(returnTo);
-  }
+  redirect(
+    withFlashMessage(resolveProductActionReturnTo(returnTo), {
+      success: `${product.name} deactivated.`,
+    })
+  );
 }
 
-export async function restoreProductAction(productId: string, returnTo?: string) {
+export async function restoreProductAction(productId: string, returnTo?: string): Promise<void> {
   const user = await requirePermission("products", "update");
 
   const product = await prisma.product.findUnique({
@@ -653,11 +671,11 @@ export async function restoreProductAction(productId: string, returnTo?: string)
   });
 
   if (!product) {
-    return { status: "error" as const, message: "Product not found." };
+    redirectProductActionError(returnTo, "Product not found.");
   }
 
   if (product.status !== ProductStatus.ARCHIVED) {
-    return { status: "error" as const, message: "Only archived products can be restored." };
+    redirectProductActionError(returnTo, "Only archived products can be restored.");
   }
 
   await prisma.$transaction(async (tx) => {
@@ -679,8 +697,9 @@ export async function restoreProductAction(productId: string, returnTo?: string)
   });
 
   revalidateProductPaths(productId);
-
-  if (returnTo) {
-    redirect(returnTo);
-  }
+  redirect(
+    withFlashMessage(resolveProductActionReturnTo(returnTo), {
+      success: `${product.name} restored.`,
+    })
+  );
 }

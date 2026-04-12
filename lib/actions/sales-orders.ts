@@ -1,7 +1,13 @@
 "use server";
 
 import { randomInt } from "node:crypto";
-import { LocationType, Prisma, ProductStatus, SalesOrderStatus } from "@prisma/client";
+import {
+  LocationType,
+  Prisma,
+  ProductStatus,
+  SalesOrderStatus,
+  type SalesOrderVoidReason,
+} from "@prisma/client";
 import type { PaymentMode } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -12,13 +18,17 @@ import {
   getSaleCostSnapshot,
   syncLocationCostSnapshot,
 } from "@/lib/costing";
-import { requirePermission } from "@/lib/dal/auth";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
+import { formatSalesOrderVoidReason } from "@/lib/sales-orders";
 import {
+  extractSalesOrderVoidFormValues,
   extractSalesOrderFormValues,
+  salesOrderVoidFormSchema,
   salesOrderFormSchema,
   WALK_IN_CUSTOMER_NAME,
+  type SalesOrderVoidFormState,
   type SalesOrderFormState,
 } from "@/lib/validators/sales-orders";
 
@@ -238,6 +248,20 @@ function getWorkflowOrderId(formData: FormData) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function buildVoidReturnMovementNotes(input: {
+  orderNumber: string;
+  reason: SalesOrderVoidReason;
+  remarks: string;
+  documentation: string;
+}) {
+  return [
+    `Void return for order ${input.orderNumber}`,
+    `Reason: ${formatSalesOrderVoidReason(input.reason)}`,
+    `Remarks: ${input.remarks}`,
+    `Documentation: ${input.documentation}`,
+  ].join("\n");
+}
+
 function normalizeCustomerName(customerMode: string, customerName: string, intent: string) {
   const trimmedCustomerName = customerName.trim();
 
@@ -436,6 +460,21 @@ async function loadOrderForStatusAction(orderId: string) {
   });
 }
 
+function isOutsideSalesStaffScope(
+  order: { items: Array<{ locationId: string }> },
+  activeLocationId: string | null
+) {
+  if (!activeLocationId) {
+    return false;
+  }
+
+  if (order.items.length === 0) {
+    return true;
+  }
+
+  return order.items.some((item) => item.locationId !== activeLocationId);
+}
+
 async function findStockShortages(
   client: Prisma.TransactionClient | typeof prisma,
   requirements: StockRequirement[]
@@ -629,6 +668,10 @@ export async function createSalesOrderAction(
   formData: FormData
 ): Promise<SalesOrderFormState> {
   const user = await requirePermission("sales_orders", "create");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: "/dashboard/sales-orders/new",
+  });
   const values = extractSalesOrderFormValues(formData);
   const fieldValues = buildFormValueMap(values);
   const intent = parseIntent(values.intent);
@@ -696,19 +739,19 @@ export async function createSalesOrderAction(
     unitPrice: item.unitPrice,
   }));
 
-  if (user.role === "SALES_STAFF" && user.assignedLocationId) {
+  if (user.role === "SALES_STAFF" && activeLocationId) {
     const hasCrossBranchItem = preparedItems.some(
-      (item) => item.locationId !== user.assignedLocationId
+      (item) => item.locationId !== activeLocationId
     );
 
-    if (parsed.data.locationId !== user.assignedLocationId || hasCrossBranchItem) {
+    if (parsed.data.locationId !== activeLocationId || hasCrossBranchItem) {
       return {
         status: "error",
-        message: "Sales staff can only record sales for their assigned branch.",
+        message: "Sales staff can only record sales for the selected branch.",
         fieldErrors: {
-          locationId: ["This sale must stay under your assigned branch."],
-          items: ["This sale must stay under your assigned branch."],
-          itemsPayload: ["This sale must stay under your assigned branch."],
+          locationId: ["This sale must stay under your selected branch."],
+          items: ["This sale must stay under your selected branch."],
+          itemsPayload: ["This sale must stay under your selected branch."],
         },
         values: fieldValues,
       };
@@ -1039,11 +1082,22 @@ export async function createSalesOrderAction(
 
 async function runConfirmSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: `/dashboard/sales-orders/${orderId}`,
+  });
 
   const order = await loadOrderForStatusAction(orderId);
 
   if (!order) {
     return { status: "error" as const, message: "Sales order not found." };
+  }
+
+  if (isOutsideSalesStaffScope(order, activeLocationId)) {
+    return {
+      status: "error" as const,
+      message: "You can only update orders for your selected branch.",
+    };
   }
 
   if (order.status !== "DRAFT") {
@@ -1104,11 +1158,22 @@ async function runConfirmSalesOrderAction(orderId: string) {
 
 async function runDeliverSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: `/dashboard/sales-orders/${orderId}`,
+  });
 
   const order = await loadOrderForStatusAction(orderId);
 
   if (!order) {
     return { status: "error" as const, message: "Sales order not found." };
+  }
+
+  if (isOutsideSalesStaffScope(order, activeLocationId)) {
+    return {
+      status: "error" as const,
+      message: "You can only update orders for your selected branch.",
+    };
   }
 
   if (order.status !== "CONFIRMED") {
@@ -1218,14 +1283,34 @@ async function runDeliverSalesOrderAction(orderId: string) {
 
 async function runCompleteSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: `/dashboard/sales-orders/${orderId}`,
+  });
 
   const order = await prisma.salesOrder.findUnique({
     where: { id: orderId },
-    select: { id: true, orderNumber: true, status: true },
+    select: {
+      id: true,
+      orderNumber: true,
+      status: true,
+      items: {
+        select: {
+          locationId: true,
+        },
+      },
+    },
   });
 
   if (!order) {
     return { status: "error" as const, message: "Sales order not found." };
+  }
+
+  if (isOutsideSalesStaffScope(order, activeLocationId)) {
+    return {
+      status: "error" as const,
+      message: "You can only update orders for your selected branch.",
+    };
   }
 
   if (order.status !== "DELIVERED") {
@@ -1256,6 +1341,10 @@ async function runCompleteSalesOrderAction(orderId: string) {
 
 async function runCancelSalesOrderAction(orderId: string) {
   const user = await requirePermission("sales_orders", "update");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: `/dashboard/sales-orders/${orderId}`,
+  });
 
   const order = await loadOrderForStatusAction(orderId);
 
@@ -1263,77 +1352,33 @@ async function runCancelSalesOrderAction(orderId: string) {
     return { status: "error" as const, message: "Sales order not found." };
   }
 
-  if (order.status === "COMPLETED") {
-    return { status: "error" as const, message: "Completed orders cannot be cancelled." };
+  if (isOutsideSalesStaffScope(order, activeLocationId)) {
+    return {
+      status: "error" as const,
+      message: "You can only update orders for your selected branch.",
+    };
   }
 
   if (order.status === "CANCELLED") {
     return { status: "error" as const, message: "This order is already cancelled." };
   }
 
-  const wasDelivered = order.status === "DELIVERED";
+  if (order.status === "DELIVERED" || order.status === "COMPLETED") {
+    return {
+      status: "error" as const,
+      message:
+        "Use Void Sale with return details for delivered or completed sales so stock and return documentation stay accurate.",
+    };
+  }
+
   const wasConfirmed = order.status === "CONFIRMED";
-  const locationIds = wasDelivered || wasConfirmed
-    ? [...new Set(order.items.map((item) => item.locationId))]
-    : [];
+  const locationIds = wasConfirmed ? [...new Set(order.items.map((item) => item.locationId))] : [];
 
   await prisma.$transaction(async (tx) => {
     await tx.salesOrder.update({
       where: { id: orderId },
       data: { status: "CANCELLED" },
     });
-
-    if (wasDelivered) {
-      for (const item of order.items) {
-        const stockBefore = await tx.locationStock.findUnique({
-          where: {
-            locationId_productId: {
-              locationId: item.locationId,
-              productId: item.productId,
-            },
-          },
-          select: {
-            quantity: true,
-          },
-        });
-
-        await tx.inventoryMovement.create({
-          data: {
-            type: "CUSTOMER_RETURN",
-            productId: item.productId,
-            locationId: item.locationId,
-            quantityChange: item.quantity,
-            referenceType: "sales_order",
-            referenceId: orderId,
-            notes: `Return from cancelled order ${order.orderNumber}`,
-            performedById: user.id,
-          },
-        });
-
-        await tx.locationStock.update({
-          where: {
-            locationId_productId: {
-              locationId: item.locationId,
-              productId: item.productId,
-            },
-          },
-          data: { quantity: { increment: item.quantity } },
-        });
-
-        await applyInboundMovingAverage({
-          tx,
-          locationId: item.locationId,
-          productId: item.productId,
-          onHandBefore: stockBefore?.quantity ?? 0,
-          inboundQty: item.quantity,
-          inboundUnitCost: item.unitCostAtSale,
-          performedById: user.id,
-          sourceType: "customer_return",
-          sourceId: orderId,
-          reason: "Sales order cancellation return",
-        });
-      }
-    }
 
     if (wasConfirmed) {
       const requirements = buildStockRequirements(order.items as OrderMutationItem[]);
@@ -1360,7 +1405,6 @@ async function runCancelSalesOrderAction(orderId: string) {
         details: {
           orderNumber: order.orderNumber,
           previousStatus: order.status,
-          stockReturned: wasDelivered,
           reservationReleased: wasConfirmed,
         },
       },
@@ -1370,6 +1414,148 @@ async function runCancelSalesOrderAction(orderId: string) {
 
   revalidateSalesOrderPaths({ orderId, locationIds });
   return { status: "success" as const, message: `Order ${order.orderNumber} cancelled.` };
+}
+
+async function runVoidSalesOrderAction(input: {
+  orderId: string;
+  voidReason: SalesOrderVoidReason;
+  voidRemarks: string;
+  voidDocumentation: string;
+}) {
+  const user = await requirePermission("sales_orders", "update");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: `/dashboard/sales-orders/${input.orderId}`,
+  });
+
+  const order = await loadOrderForStatusAction(input.orderId);
+
+  if (!order) {
+    return { status: "error" as const, message: "Sales order not found." };
+  }
+
+  if (isOutsideSalesStaffScope(order, activeLocationId)) {
+    return {
+      status: "error" as const,
+      message: "You can only update orders for your selected branch.",
+    };
+  }
+
+  if (order.status === "CANCELLED") {
+    return { status: "error" as const, message: "This order is already cancelled." };
+  }
+
+  if (order.status !== "DELIVERED" && order.status !== "COMPLETED") {
+    return {
+      status: "error" as const,
+      message: "Only DELIVERED or COMPLETED sales can be voided with stock return.",
+    };
+  }
+
+  const locationIds = [...new Set(order.items.map((item) => item.locationId))];
+  const reasonLabel = formatSalesOrderVoidReason(input.voidReason);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.salesOrder.update({
+      where: { id: input.orderId },
+      data: {
+        status: "CANCELLED",
+        voidReason: input.voidReason,
+        voidRemarks: input.voidRemarks,
+        voidDocumentation: input.voidDocumentation,
+        voidedAt: new Date(),
+        voidedById: user.id,
+      },
+    });
+
+    for (const item of order.items) {
+      const stockBefore = await tx.locationStock.findUnique({
+        where: {
+          locationId_productId: {
+            locationId: item.locationId,
+            productId: item.productId,
+          },
+        },
+        select: {
+          quantity: true,
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          type: "CUSTOMER_RETURN",
+          productId: item.productId,
+          locationId: item.locationId,
+          quantityChange: item.quantity,
+          referenceType: "sales_order",
+          referenceId: input.orderId,
+          notes: buildVoidReturnMovementNotes({
+            orderNumber: order.orderNumber,
+            reason: input.voidReason,
+            remarks: input.voidRemarks,
+            documentation: input.voidDocumentation,
+          }),
+          performedById: user.id,
+        },
+      });
+
+      await tx.locationStock.upsert({
+        where: {
+          locationId_productId: {
+            locationId: item.locationId,
+            productId: item.productId,
+          },
+        },
+        create: {
+          locationId: item.locationId,
+          productId: item.productId,
+          quantity: item.quantity,
+          reservedQty: 0,
+        },
+        update: {
+          quantity: { increment: item.quantity },
+        },
+      });
+
+      await applyInboundMovingAverage({
+        tx,
+        locationId: item.locationId,
+        productId: item.productId,
+        onHandBefore: stockBefore?.quantity ?? 0,
+        inboundQty: item.quantity,
+        inboundUnitCost: item.unitCostAtSale,
+        performedById: user.id,
+        sourceType: "customer_return",
+        sourceId: input.orderId,
+        reason: `Void sale return (${reasonLabel})`,
+      });
+    }
+
+    await logAudit(
+      {
+        userId: user.id,
+        action: "sales_order.void",
+        entity: "sales_order",
+        entityId: input.orderId,
+        details: {
+          orderNumber: order.orderNumber,
+          previousStatus: order.status,
+          voidReason: input.voidReason,
+          voidReasonLabel: reasonLabel,
+          voidRemarks: input.voidRemarks,
+          voidDocumentation: input.voidDocumentation,
+          stockReturned: true,
+        },
+      },
+      tx
+    );
+  });
+
+  revalidateSalesOrderPaths({ orderId: input.orderId, locationIds });
+  return {
+    status: "success" as const,
+    message: `Order ${order.orderNumber} voided. Stock restored to branch inventory.`,
+  };
 }
 
 export async function confirmSalesOrderAction(
@@ -1434,4 +1620,41 @@ export async function cancelSalesOrderAction(
   }
 
   return runCancelSalesOrderAction(orderId);
+}
+
+export async function voidSalesOrderWithReturnAction(
+  _prevState: SalesOrderVoidFormState,
+  formData: FormData
+): Promise<SalesOrderVoidFormState> {
+  const values = extractSalesOrderVoidFormValues(formData);
+  const parsed = salesOrderVoidFormSchema.safeParse(values);
+
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Please complete the return details before voiding this sale.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+      values,
+    };
+  }
+
+  const result = await runVoidSalesOrderAction(parsed.data);
+
+  if (result.status === "error") {
+    return {
+      status: "error",
+      message: result.message,
+      values,
+    };
+  }
+
+  return result;
+}
+
+// Backward-compatible alias for older UI components that still refer to "void" terminology.
+export async function voidSalesOrderAction(
+  prevState: SalesOrderWorkflowActionState,
+  formData: FormData
+): Promise<SalesOrderWorkflowActionState> {
+  return cancelSalesOrderAction(prevState, formData);
 }

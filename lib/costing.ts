@@ -5,6 +5,7 @@ export const COST_SHOCK_WARNING_THRESHOLD = 0.1;
 export const COST_SHOCK_ESCALATION_THRESHOLD = 0.15;
 
 type CostingClient = Prisma.TransactionClient;
+type SqlQueryClient = Pick<CostingClient, "$queryRaw">;
 
 type DecimalInput = Prisma.Decimal | number | string;
 
@@ -34,10 +35,84 @@ export type InboundMovingAverageResult = {
   isCostShock: boolean;
 };
 
+const COSTING_TABLE_CHECK_CACHE_MS = 60_000;
+let costingPersistenceCache: { checkedAt: number; isAvailable: boolean } | null = null;
+let hasLoggedMissingCostingTable = false;
+
 export function toMoneyDecimal(value: DecimalInput) {
   const numeric = typeof value === "string" ? Number(value) : Number(value);
   const safeValue = Number.isFinite(numeric) ? numeric : 0;
   return new Prisma.Decimal(safeValue.toFixed(2));
+}
+
+function updateCostingPersistenceCache(isAvailable: boolean) {
+  costingPersistenceCache = {
+    checkedAt: Date.now(),
+    isAvailable,
+  };
+}
+
+function logMissingCostingTableWarning(context: string, error: unknown) {
+  if (hasLoggedMissingCostingTable) {
+    return;
+  }
+
+  hasLoggedMissingCostingTable = true;
+  const detail = error instanceof Error ? error.message : "Unknown Prisma error.";
+  console.warn(
+    `[costing] Missing costing tables while ${context}. ` +
+      "Falling back to product default cost and skipping moving-average persistence. " +
+      "Apply pending Prisma migrations to restore full costing behavior. " +
+      `Detail: ${detail}`
+  );
+}
+
+export function isMissingCostingTableError(error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021") {
+    const modelName =
+      typeof error.meta === "object" && error.meta && "modelName" in error.meta
+        ? String((error.meta as { modelName?: unknown }).modelName ?? "")
+        : "";
+    return modelName === "LocationProductCost" || modelName === "ProductCostHistory";
+  }
+
+  if (error instanceof Error) {
+    return (
+      error.message.includes("LocationProductCost") || error.message.includes("ProductCostHistory")
+    );
+  }
+
+  return false;
+}
+
+export async function isCostingPersistenceAvailable(client: SqlQueryClient) {
+  if (
+    costingPersistenceCache &&
+    Date.now() - costingPersistenceCache.checkedAt <= COSTING_TABLE_CHECK_CACHE_MS
+  ) {
+    return costingPersistenceCache.isAvailable;
+  }
+
+  try {
+    const rows = await client.$queryRaw<
+      Array<{
+        locationProductCostTable: string | null;
+        productCostHistoryTable: string | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        to_regclass('public."LocationProductCost"') AS "locationProductCostTable",
+        to_regclass('public."ProductCostHistory"') AS "productCostHistoryTable"
+    `);
+    const row = rows[0];
+    const isAvailable = Boolean(row?.locationProductCostTable && row?.productCostHistoryTable);
+    updateCostingPersistenceCache(isAvailable);
+    return isAvailable;
+  } catch {
+    // If introspection fails, keep existing behavior and let normal queries decide.
+    updateCostingPersistenceCache(true);
+    return true;
+  }
 }
 
 function toPercentDecimal(value: number | null) {
@@ -89,8 +164,25 @@ export async function getSaleCostSnapshot(
     productId: string;
   }
 ): Promise<SaleCostSnapshot> {
-  const [locationCost, product] = await Promise.all([
-    tx.locationProductCost.findUnique({
+  const product = await tx.product.findUnique({
+    where: { id: input.productId },
+    select: { costPrice: true },
+  });
+
+  if (!product) {
+    throw new Error(`Product ${input.productId} was not found while resolving sale cost.`);
+  }
+
+  if (!(await isCostingPersistenceAvailable(tx))) {
+    return {
+      unitCost: product.costPrice,
+      isEstimatedCost: true,
+      source: "product_default",
+    };
+  }
+
+  try {
+    const locationCost = await tx.locationProductCost.findUnique({
       where: {
         locationId_productId: {
           locationId: input.locationId,
@@ -100,29 +192,36 @@ export async function getSaleCostSnapshot(
       select: {
         avgUnitCost: true,
       },
-    }),
-    tx.product.findUnique({
-      where: { id: input.productId },
-      select: { costPrice: true },
-    }),
-  ]);
+    });
 
-  if (!product) {
-    throw new Error(`Product ${input.productId} was not found while resolving sale cost.`);
-  }
-
-  if (locationCost && locationCost.avgUnitCost.toNumber() > 0) {
-    return {
-      unitCost: locationCost.avgUnitCost,
-      isEstimatedCost: false,
-      source: "location_avg",
-    };
+    if (locationCost && locationCost.avgUnitCost.toNumber() > 0) {
+      return {
+        unitCost: locationCost.avgUnitCost,
+        isEstimatedCost: false,
+        source: "location_avg",
+      };
+    }
+  } catch (error) {
+    if (!isMissingCostingTableError(error)) {
+      throw error;
+    }
+    updateCostingPersistenceCache(false);
+    logMissingCostingTableWarning("resolving sale cost snapshot", error);
   }
 
   return {
     unitCost: product.costPrice,
     isEstimatedCost: true,
     source: "product_default",
+  };
+}
+
+function buildFallbackInboundResult(inboundUnitCost: Prisma.Decimal): InboundMovingAverageResult {
+  return {
+    prevAvgUnitCost: inboundUnitCost,
+    newAvgUnitCost: inboundUnitCost,
+    changePct: null,
+    isCostShock: false,
   };
 }
 
@@ -134,15 +233,27 @@ export async function syncLocationCostSnapshot(
     onHandQtySnapshot: number;
   }
 ) {
-  await tx.locationProductCost.updateMany({
-    where: {
-      locationId: input.locationId,
-      productId: input.productId,
-    },
-    data: {
-      onHandQtySnapshot: Math.max(0, Math.floor(input.onHandQtySnapshot)),
-    },
-  });
+  if (!(await isCostingPersistenceAvailable(tx))) {
+    return;
+  }
+
+  try {
+    await tx.locationProductCost.updateMany({
+      where: {
+        locationId: input.locationId,
+        productId: input.productId,
+      },
+      data: {
+        onHandQtySnapshot: Math.max(0, Math.floor(input.onHandQtySnapshot)),
+      },
+    });
+  } catch (error) {
+    if (!isMissingCostingTableError(error)) {
+      throw error;
+    }
+    updateCostingPersistenceCache(false);
+    logMissingCostingTableWarning("syncing location cost snapshot", error);
+  }
 }
 
 export async function applyInboundMovingAverage({
@@ -162,79 +273,94 @@ export async function applyInboundMovingAverage({
   const inboundCostNumber = inboundCostDecimal.toNumber();
   const safeOnHandBefore = Math.max(0, Math.floor(onHandBefore));
 
-  const existingCost = await tx.locationProductCost.findUnique({
-    where: {
-      locationId_productId: {
-        locationId,
-        productId,
+  if (!(await isCostingPersistenceAvailable(tx))) {
+    return buildFallbackInboundResult(inboundCostDecimal);
+  }
+
+  try {
+    const existingCost = await tx.locationProductCost.findUnique({
+      where: {
+        locationId_productId: {
+          locationId,
+          productId,
+        },
       },
-    },
-    select: {
-      avgUnitCost: true,
-    },
-  });
-
-  const prevAvgUnitCostDecimal =
-    existingCost?.avgUnitCost && existingCost.avgUnitCost.toNumber() > 0
-      ? existingCost.avgUnitCost
-      : inboundCostDecimal;
-  const prevAvgUnitCost = prevAvgUnitCostDecimal.toNumber();
-
-  const { nextAvgUnitCost, onHandAfter } = calcWeightedAverageCost({
-    onHandBefore: safeOnHandBefore,
-    prevAvgUnitCost,
-    inboundQty: inboundQtyWhole,
-    inboundUnitCost: inboundCostNumber,
-  });
-
-  const newAvgUnitCostDecimal = toMoneyDecimal(nextAvgUnitCost);
-  const changePctValue =
-    prevAvgUnitCost > 0 ? (newAvgUnitCostDecimal.toNumber() - prevAvgUnitCost) / prevAvgUnitCost : null;
-  const changePctDecimal = toPercentDecimal(changePctValue);
-  const isCostShock =
-    changePctValue !== null && Math.abs(changePctValue) >= COST_SHOCK_WARNING_THRESHOLD;
-
-  await tx.locationProductCost.upsert({
-    where: {
-      locationId_productId: {
-        locationId,
-        productId,
+      select: {
+        avgUnitCost: true,
       },
-    },
-    create: {
-      locationId,
-      productId,
-      avgUnitCost: newAvgUnitCostDecimal,
-      lastInboundUnitCost: inboundCostDecimal,
-      onHandQtySnapshot: onHandAfter,
-    },
-    update: {
-      avgUnitCost: newAvgUnitCostDecimal,
-      lastInboundUnitCost: inboundCostDecimal,
-      onHandQtySnapshot: onHandAfter,
-    },
-  });
+    });
 
-  await tx.productCostHistory.create({
-    data: {
-      locationId,
-      productId,
+    const prevAvgUnitCostDecimal =
+      existingCost?.avgUnitCost && existingCost.avgUnitCost.toNumber() > 0
+        ? existingCost.avgUnitCost
+        : inboundCostDecimal;
+    const prevAvgUnitCost = prevAvgUnitCostDecimal.toNumber();
+
+    const { nextAvgUnitCost, onHandAfter } = calcWeightedAverageCost({
+      onHandBefore: safeOnHandBefore,
+      prevAvgUnitCost,
       inboundQty: inboundQtyWhole,
-      inboundUnitCost: inboundCostDecimal,
+      inboundUnitCost: inboundCostNumber,
+    });
+
+    const newAvgUnitCostDecimal = toMoneyDecimal(nextAvgUnitCost);
+    const changePctValue =
+      prevAvgUnitCost > 0
+        ? (newAvgUnitCostDecimal.toNumber() - prevAvgUnitCost) / prevAvgUnitCost
+        : null;
+    const changePctDecimal = toPercentDecimal(changePctValue);
+    const isCostShock =
+      changePctValue !== null && Math.abs(changePctValue) >= COST_SHOCK_WARNING_THRESHOLD;
+
+    await tx.locationProductCost.upsert({
+      where: {
+        locationId_productId: {
+          locationId,
+          productId,
+        },
+      },
+      create: {
+        locationId,
+        productId,
+        avgUnitCost: newAvgUnitCostDecimal,
+        lastInboundUnitCost: inboundCostDecimal,
+        onHandQtySnapshot: onHandAfter,
+      },
+      update: {
+        avgUnitCost: newAvgUnitCostDecimal,
+        lastInboundUnitCost: inboundCostDecimal,
+        onHandQtySnapshot: onHandAfter,
+      },
+    });
+
+    await tx.productCostHistory.create({
+      data: {
+        locationId,
+        productId,
+        inboundQty: inboundQtyWhole,
+        inboundUnitCost: inboundCostDecimal,
+        prevAvgUnitCost: prevAvgUnitCostDecimal,
+        newAvgUnitCost: newAvgUnitCostDecimal,
+        sourceType,
+        sourceId,
+        changePct: changePctDecimal,
+        reason,
+        changedById: performedById,
+      },
+    });
+
+    return {
       prevAvgUnitCost: prevAvgUnitCostDecimal,
       newAvgUnitCost: newAvgUnitCostDecimal,
-      sourceType,
-      sourceId,
       changePct: changePctDecimal,
-      reason,
-      changedById: performedById,
-    },
-  });
-
-  return {
-    prevAvgUnitCost: prevAvgUnitCostDecimal,
-    newAvgUnitCost: newAvgUnitCostDecimal,
-    changePct: changePctDecimal,
-    isCostShock,
-  };
+      isCostShock,
+    };
+  } catch (error) {
+    if (!isMissingCostingTableError(error)) {
+      throw error;
+    }
+    updateCostingPersistenceCache(false);
+    logMissingCostingTableWarning("applying inbound moving average", error);
+    return buildFallbackInboundResult(inboundCostDecimal);
+  }
 }

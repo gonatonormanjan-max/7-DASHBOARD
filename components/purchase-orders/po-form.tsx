@@ -57,6 +57,25 @@ type PurchaseOrderFormProps = {
   supplierProductLinks: SupplierProductLink[];
 };
 
+function mergeSupplierOptions(
+  baseSuppliers: SupplierOption[],
+  inlineSuppliers: SupplierOption[]
+) {
+  const merged = new Map<string, SupplierOption>();
+
+  for (const supplier of baseSuppliers) {
+    merged.set(supplier.id, supplier);
+  }
+
+  for (const supplier of inlineSuppliers) {
+    if (!merged.has(supplier.id)) {
+      merged.set(supplier.id, supplier);
+    }
+  }
+
+  return [...merged.values()];
+}
+
 function createRow(id: string, overrides: Partial<PurchaseOrderRow> = {}): PurchaseOrderRow {
   return {
     id,
@@ -115,7 +134,7 @@ export function PurchaseOrderForm({
   }, [inlineSupplierState.createdSupplier?.id, inlineSupplierState.status]);
 
   const allSuppliers = useMemo(
-    () => [...suppliers, ...extraSuppliers],
+    () => mergeSupplierOptions(suppliers, extraSuppliers),
     [suppliers, extraSuppliers]
   );
 

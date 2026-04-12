@@ -1,5 +1,5 @@
 import { createSalesOrderAction } from "@/lib/actions/sales-orders";
-import { requirePermission } from "@/lib/dal/auth";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getSalesOrderById, getSalesOrderFormOptions } from "@/lib/dal/sales-orders";
 import { PageHeader } from "@/components/ui/page-header";
 import { SalesOrderFormRedesign } from "@/components/sales-orders/sales-order-form-redesign";
@@ -18,13 +18,19 @@ export default async function NewSalesOrderPage({
   searchParams,
 }: NewSalesOrderPageProps) {
   const user = await requirePermission("sales_orders", "create");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: "/dashboard/sales-orders/new",
+  });
   const resolvedSearchParams = await searchParams;
   const from = readParam(resolvedSearchParams.from);
-  const { products, locations, stockRows } = await getSalesOrderFormOptions();
+  const { products, locations, stockRows } = await getSalesOrderFormOptions({
+    locationId: activeLocationId,
+  });
   const lockedLocationId = locations.some(
-    (location) => location.id === user.assignedLocationId
+    (location) => location.id === activeLocationId
   )
-    ? user.assignedLocationId ?? undefined
+    ? activeLocationId ?? undefined
     : undefined;
 
   let initialValues:
@@ -42,7 +48,9 @@ export default async function NewSalesOrderPage({
     | undefined;
 
   if (from) {
-    const sourceOrder = await getSalesOrderById(from);
+    const sourceOrder = await getSalesOrderById(from, {
+      locationId: activeLocationId,
+    });
 
     if (sourceOrder) {
       initialValues = {

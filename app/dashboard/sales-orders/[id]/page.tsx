@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { hasPermission } from "@/lib/permissions";
-import { requirePermission } from "@/lib/dal/auth";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getSalesOrderById } from "@/lib/dal/sales-orders";
 import { formatCurrency } from "@/lib/products";
-import { formatPaymentMode } from "@/lib/sales-orders";
+import { formatPaymentMode, formatSalesOrderVoidReason } from "@/lib/sales-orders";
 import { Button } from "@/components/ui/button";
 import { DetailField } from "@/components/ui/detail-field";
 import { PageHeader } from "@/components/ui/page-header";
@@ -20,7 +20,11 @@ export default async function SalesOrderDetailPage({
 }: SalesOrderDetailPageProps) {
   const user = await requirePermission("sales_orders", "read");
   const { id } = await params;
-  const order = await getSalesOrderById(id);
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: `/dashboard/sales-orders/${id}`,
+  });
+  const order = await getSalesOrderById(id, { locationId: activeLocationId });
   const canUpdate = hasPermission(user.role, "sales_orders", "update");
 
   if (!order) {
@@ -36,6 +40,9 @@ export default async function SalesOrderDetailPage({
   const paymentBreakdown = order.paymentMode
     ? `Cash ${formatCurrency(order.cashAmount ?? 0)} / Online ${formatCurrency(order.onlineAmount ?? 0)}`
     : "No payment breakdown yet";
+  const voidReasonLabel = order.voidReason
+    ? formatSalesOrderVoidReason(order.voidReason)
+    : "Not documented";
 
   return (
     <div className="space-y-8">
@@ -79,6 +86,31 @@ export default async function SalesOrderDetailPage({
               label="Notes"
               value={order.notes?.trim() ? order.notes : "No additional note provided."}
             />
+            {order.status === "CANCELLED" ? (
+              <>
+                <DetailField label="Void reason" value={voidReasonLabel} />
+                <DetailField
+                  label="Void remarks"
+                  value={order.voidRemarks?.trim() ? order.voidRemarks : "Not documented"}
+                />
+                <DetailField
+                  label="Void documentation"
+                  value={
+                    order.voidDocumentation?.trim()
+                      ? order.voidDocumentation
+                      : "Not documented"
+                  }
+                />
+                <DetailField
+                  label="Voided by"
+                  value={
+                    order.voidedBy
+                      ? `${order.voidedBy.firstName} ${order.voidedBy.lastName}`
+                      : "Not documented"
+                  }
+                />
+              </>
+            ) : null}
           </div>
 
           <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
@@ -133,8 +165,8 @@ export default async function SalesOrderDetailPage({
           <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Workflow actions</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Move this order through its next valid status. Stock is reduced only when the
-              order is marked delivered.
+              Move this order through its next valid status. Fulfilled sales can be voided with
+              return documentation to restore stock accurately.
             </p>
             <div className="mt-4">
               <SalesOrderWorkflowActions
@@ -150,7 +182,9 @@ export default async function SalesOrderDetailPage({
             ) : null}
             {order.status === "COMPLETED" || order.status === "CANCELLED" ? (
               <p className="mt-3 text-sm text-slate-500">
-                This order is in a terminal state and no more workflow actions are available.
+                {order.status === "CANCELLED"
+                  ? "This order is cancelled and no more workflow actions are available."
+                  : "Completed orders can still be voided for return/refund cases with full documentation."}
               </p>
             ) : null}
           </div>
@@ -172,6 +206,15 @@ export default async function SalesOrderDetailPage({
                   timeStyle: "short",
                 })}
               />
+              {order.voidedAt ? (
+                <DetailField
+                  label="Voided at"
+                  value={order.voidedAt.toLocaleString("en-US", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                />
+              ) : null}
             </div>
           </div>
 

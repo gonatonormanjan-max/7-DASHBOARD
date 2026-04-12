@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { requirePermission } from "@/lib/dal/auth";
 import {
   DEFAULT_ANALYTICS_WINDOW_DAYS,
   DEFAULT_QUOTA_WINDOW_DAYS,
@@ -10,6 +9,7 @@ import {
   type QuotaMetric,
   type SalesTrendPoint,
 } from "@/lib/dal/reports";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { formatCurrency } from "@/lib/products";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
@@ -27,6 +27,7 @@ import { BranchComparisonChart } from "@/components/reports/branch-comparison-ch
 import { SeasonalTrendsChart } from "@/components/reports/seasonal-trends-chart";
 import { QuotaTracker } from "@/components/reports/quota-tracker";
 import { MetricContextStrip } from "@/components/reports/metric-context-strip";
+import { AnalyticsStatCardsCarousel } from "@/components/reports/analytics-stat-cards-carousel";
 
 type ReportsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -140,10 +141,14 @@ function getViewTabs(activeView: ReportView) {
 }
 
 export default async function ReportsPage({ searchParams }: ReportsPageProps) {
-  await requirePermission("reports", "read");
+  const user = await requirePermission("reports", "read");
 
   const resolvedSearchParams = await searchParams;
   const view = parseView(getSingleParam(resolvedSearchParams.view));
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: `/dashboard/reports?view=${view}`,
+  });
   const tabs = getViewTabs(view);
 
   if (view === "analytics") {
@@ -151,9 +156,62 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       getSingleParam(resolvedSearchParams.analyticsDays),
       DEFAULT_ANALYTICS_WINDOW_DAYS
     );
-    const analytics = await getReportsAnalyticsData(analyticsDays);
+    const analytics = await getReportsAnalyticsData(analyticsDays, {
+      locationId: activeLocationId,
+    });
     const filteredRevenue = analytics.financialSummary.totalRevenue;
     const filteredUnits = analytics.financialSummary.totalUnitsSold;
+    const analyticsStatCards = [
+      {
+        label: `Revenue (${analytics.analyticsDays} days)`,
+        value: formatCurrency(filteredRevenue),
+        tone: "primary" as const,
+        description: "Combined sales revenue inside the selected analytics window.",
+      },
+      {
+        label: `COGS (${analytics.analyticsDays} days)`,
+        value: formatCurrency(analytics.financialSummary.totalCogs),
+        tone: "default" as const,
+        description: "Cost of goods sold based on per-location moving average at sale time.",
+      },
+      {
+        label: `Gross profit (${analytics.analyticsDays} days)`,
+        value: formatCurrency(analytics.financialSummary.totalGrossProfit),
+        tone: "success" as const,
+        description: "Revenue minus COGS in the selected analytics window.",
+      },
+      {
+        label: `Gross margin (${analytics.analyticsDays} days)`,
+        value: formatPercent(analytics.financialSummary.grossMarginPct),
+        tone:
+          analytics.financialSummary.grossMarginPct !== null &&
+          analytics.financialSummary.grossMarginPct < 15
+            ? ("warning" as const)
+            : ("default" as const),
+        description: "Gross profit divided by revenue.",
+      },
+      {
+        label: `Units sold (${analytics.analyticsDays} days)`,
+        value: formatUnits(filteredUnits),
+        tone: "success" as const,
+        description: "All units sold in the selected analytics window, regardless of brand.",
+      },
+      {
+        label: "Low / out of stock",
+        value: String(analytics.inventorySummary.lowStockCount),
+        tone: "warning" as const,
+        description: "Products that are already at or below their reorder threshold.",
+      },
+      {
+        label: "Cost shock events",
+        value: String(analytics.metricContext.costShockEventsInWindow),
+        tone:
+          analytics.metricContext.costShockEscalationsInWindow > 0
+            ? ("warning" as const)
+            : ("default" as const),
+        description: "Inbound supplier/transfer cost changes beyond warning threshold.",
+      },
+    ];
 
     return (
       <div className="space-y-8">
@@ -201,51 +259,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
         <MetricContextStrip context={analytics.metricContext} />
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <StatCard
-            label={`Revenue (${analytics.analyticsDays} days)`}
-            value={formatCurrency(filteredRevenue)}
-            tone="primary"
-            description="Combined sales revenue inside the selected analytics window."
-          />
-          <StatCard
-            label={`COGS (${analytics.analyticsDays} days)`}
-            value={formatCurrency(analytics.financialSummary.totalCogs)}
-            description="Cost of goods sold based on per-location moving average at sale time."
-          />
-          <StatCard
-            label={`Gross profit (${analytics.analyticsDays} days)`}
-            value={formatCurrency(analytics.financialSummary.totalGrossProfit)}
-            tone="success"
-            description="Revenue minus COGS in the selected analytics window."
-          />
-          <StatCard
-            label={`Gross margin (${analytics.analyticsDays} days)`}
-            value={formatPercent(analytics.financialSummary.grossMarginPct)}
-            tone={analytics.financialSummary.grossMarginPct !== null && analytics.financialSummary.grossMarginPct < 15 ? "warning" : "default"}
-            description="Gross profit divided by revenue."
-          />
-          <StatCard
-            label={`Units sold (${analytics.analyticsDays} days)`}
-            value={formatUnits(filteredUnits)}
-            tone="success"
-            description="All units sold in the selected analytics window, regardless of brand."
-          />
-          <StatCard
-            label="Low / out of stock"
-            value={String(analytics.inventorySummary.lowStockCount)}
-            tone="warning"
-            description="Products that are already at or below their reorder threshold."
-          />
-          <StatCard
-            label="Cost shock events"
-            value={String(analytics.metricContext.costShockEventsInWindow)}
-            tone={
-              analytics.metricContext.costShockEscalationsInWindow > 0 ? "warning" : "default"
-            }
-            description="Inbound supplier/transfer cost changes beyond warning threshold."
-          />
-        </section>
+        <AnalyticsStatCardsCarousel cards={analyticsStatCards} />
 
         <SalesTrendChart
           data={analytics.salesTrend}
@@ -302,6 +316,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       days: quotaDays,
       metric: quotaMetric,
       target: quotaTarget,
+      locationId: activeLocationId,
     });
 
     return (
@@ -318,7 +333,9 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     );
   }
 
-  const overview = await getReportsOverviewData();
+  const overview = await getReportsOverviewData({
+    locationId: activeLocationId,
+  });
   const highestDay = getDayCardCopy(overview.summary.highestDay, "highest");
   const lowestDay = getDayCardCopy(overview.summary.lowestDay, "lowest");
 

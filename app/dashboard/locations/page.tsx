@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { hasPermission } from "@/lib/permissions";
-import { requirePermission } from "@/lib/dal/auth";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { getLocationListData } from "@/lib/dal/locations";
 import { parseLocationListFilters } from "@/lib/validators/locations";
@@ -17,8 +17,14 @@ type LocationsPageProps = {
 
 export default async function LocationsPage({ searchParams }: LocationsPageProps) {
   const user = await requirePermission("locations", "read");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: "/dashboard/locations",
+  });
   const filters = parseLocationListFilters(await searchParams);
-  const { locations, pagination, summary } = await getLocationListData(filters);
+  const { locations, pagination, summary } = await getLocationListData(filters, {
+    locationId: activeLocationId,
+  });
   const canCreate = hasPermission(user.role, "locations", "create");
   const canManage = hasPermission(user.role, "locations", "update");
   const returnParams = new URLSearchParams();
@@ -36,7 +42,9 @@ export default async function LocationsPage({ searchParams }: LocationsPageProps
   const returnQuery = returnParams.toString();
   const returnTo = returnQuery ? `/dashboard/locations?${returnQuery}` : "/dashboard/locations";
   const headerDescription =
-    "Manage warehouse and branch locations where inventory is stored and sold.";
+    user.role === "SALES_STAFF"
+      ? "Your currently selected branch profile for today."
+      : "Manage warehouse and branch locations where inventory is stored and sold.";
 
   return (
     <div className="space-y-8">

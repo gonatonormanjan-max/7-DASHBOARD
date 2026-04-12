@@ -1,4 +1,8 @@
-import type { PaymentMode, SalesOrderStatus } from "@prisma/client";
+import type {
+  PaymentMode,
+  SalesOrderStatus,
+  SalesOrderVoidReason,
+} from "@prisma/client";
 
 export const SALES_ORDER_ENTRY_STATUSES: SalesOrderStatus[] = ["COMPLETED"];
 
@@ -40,6 +44,19 @@ export function formatPaymentMode(paymentMode: PaymentMode) {
       return "Online payment";
     case "MIXED":
       return "Mixed payment";
+  }
+}
+
+export function formatSalesOrderVoidReason(reason: SalesOrderVoidReason) {
+  switch (reason) {
+    case "DEFECT":
+      return "Defect";
+    case "RETURNED_REFUND":
+      return "Returned / Refund";
+    case "REPLACE":
+      return "Replace";
+    case "OTHERS":
+      return "Others";
   }
 }
 

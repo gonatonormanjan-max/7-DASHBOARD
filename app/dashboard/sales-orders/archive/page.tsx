@@ -1,6 +1,6 @@
 import Form from "next/form";
 import Link from "next/link";
-import { requirePermission } from "@/lib/dal/auth";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getSalesOrderListData } from "@/lib/dal/sales-orders";
 import { formatCurrency } from "@/lib/products";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,11 @@ function readParam(value: string | string[] | undefined) {
 export default async function SalesOrdersArchivePage({
   searchParams,
 }: ArchivePageProps) {
-  await requirePermission("sales_orders", "read");
+  const user = await requirePermission("sales_orders", "read");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: "/dashboard/sales-orders/archive",
+  });
   const resolvedSearchParams = await searchParams;
   const query = readParam(resolvedSearchParams.query) ?? "";
   const windowFilter = readParam(resolvedSearchParams.window) ?? "all";
@@ -32,6 +36,8 @@ export default async function SalesOrdersArchivePage({
         ? windowFilter
         : "all",
     archived: true,
+  }, {
+    locationId: activeLocationId,
   });
   const hasFilters = query.trim().length > 0 || windowFilter !== "all";
 

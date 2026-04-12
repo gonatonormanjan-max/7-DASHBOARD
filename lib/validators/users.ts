@@ -18,12 +18,6 @@ const baseUserSchema = z.object({
   isActive: z
     .enum(["true", "false"])
     .transform((value) => value === "true"),
-  assignedLocationId: z
-    .string()
-    .uuid("Select a valid location.")
-    .optional()
-    .or(z.literal(""))
-    .transform((value) => value || null),
 });
 
 export const createUserFormSchema = baseUserSchema
@@ -111,6 +105,5 @@ export function extractUserFormValues(formData: FormData) {
     isActive: String(formData.get("isActive") ?? "true"),
     password: String(formData.get("password") ?? ""),
     confirmPassword: String(formData.get("confirmPassword") ?? ""),
-    assignedLocationId: String(formData.get("assignedLocationId") ?? ""),
   };
 }

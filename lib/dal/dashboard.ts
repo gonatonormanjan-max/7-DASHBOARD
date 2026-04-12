@@ -55,15 +55,23 @@ function getStartOfToday() {
 }
 
 export async function getDashboardData(
-  userId: string,
+  _userId: string,
   role: Role,
-  assignedLocationId: string | null
+  activeLocationId: string | null
 ): Promise<DashboardData> {
   const startOfToday = getStartOfToday();
   const salesStaffOrderScope =
-    role === "SALES_STAFF" && assignedLocationId ? { createdById: userId } : {};
+    role === "SALES_STAFF" && activeLocationId
+      ? {
+          items: {
+            some: {
+              locationId: activeLocationId,
+            },
+          },
+        }
+      : {};
   const salesStaffLocationScope =
-    role === "SALES_STAFF" && assignedLocationId ? { locationId: assignedLocationId } : {};
+    role === "SALES_STAFF" && activeLocationId ? { locationId: activeLocationId } : {};
 
   const [
     ordersToday,
@@ -75,21 +83,21 @@ export async function getDashboardData(
   ] = await Promise.all([
     prisma.salesOrder.count({
       where: {
+        ...salesStaffOrderScope,
         createdAt: {
           gte: startOfToday,
         },
-        ...salesStaffOrderScope,
       },
     }),
     prisma.salesOrder.aggregate({
       where: {
+        ...salesStaffOrderScope,
         createdAt: {
           gte: startOfToday,
         },
         status: {
           in: [...revenueSalesOrderStatuses],
         },
-        ...salesStaffOrderScope,
       },
       _sum: {
         totalAmount: true,
@@ -120,6 +128,7 @@ export async function getDashboardData(
     prisma.salesOrder.count({
       where: {
         status: SalesOrderStatus.CONFIRMED,
+        ...salesStaffOrderScope,
       },
     }),
     prisma.inventoryMovement.findMany({
@@ -149,7 +158,9 @@ export async function getDashboardData(
         },
       },
     }),
-    getInventoryLandingData(),
+    getInventoryLandingData({
+      locationId: role === "SALES_STAFF" ? activeLocationId : null,
+    }),
   ]);
 
   return {
@@ -169,13 +180,17 @@ export async function getDashboardData(
       locationName: movement.location.name,
       performedByName: movement.performedBy.firstName,
     })),
-    locationHealth: inventoryLandingData.locationCards.map((location) => ({
-      id: location.id,
-      name: location.name,
-      type: location.type,
-      skuCount: location.skuCount,
-      totalOnHand: location.totalOnHand,
-      lowStockCount: location.lowStockCount,
-    })),
+    locationHealth: inventoryLandingData.locationCards
+      .filter((location) =>
+        role === "SALES_STAFF" && activeLocationId ? location.id === activeLocationId : true
+      )
+      .map((location) => ({
+        id: location.id,
+        name: location.name,
+        type: location.type,
+        skuCount: location.skuCount,
+        totalOnHand: location.totalOnHand,
+        lowStockCount: location.lowStockCount,
+      })),
   };
 }

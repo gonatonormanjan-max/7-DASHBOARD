@@ -1,7 +1,7 @@
 import Form from "next/form";
 import Link from "next/link";
 import { hasPermission } from "@/lib/permissions";
-import { requirePermission } from "@/lib/dal/auth";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getSalesOrderListData } from "@/lib/dal/sales-orders";
 import { parseSalesOrderListFilters } from "@/lib/validators/sales-orders";
 import { formatCurrency } from "@/lib/products";
@@ -19,8 +19,14 @@ export default async function SalesOrdersPage({
   searchParams,
 }: SalesOrdersPageProps) {
   const user = await requirePermission("sales_orders", "read");
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: "/dashboard/sales-orders",
+  });
   const filters = parseSalesOrderListFilters(await searchParams);
-  const { orders, pagination, summary } = await getSalesOrderListData(filters);
+  const { orders, pagination, summary } = await getSalesOrderListData(filters, {
+    locationId: activeLocationId,
+  });
   const canCreate = hasPermission(user.role, "sales_orders", "create");
   const hasFilters = Boolean(
     filters.query || filters.status !== "all" || filters.dateFrom || filters.dateTo

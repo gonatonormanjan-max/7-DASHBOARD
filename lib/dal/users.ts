@@ -80,22 +80,8 @@ export async function getUserById(id: string) {
       email: true,
       role: true,
       isActive: true,
-      assignedLocationId: true,
       createdAt: true,
       updatedAt: true,
-    },
-  });
-}
-
-export async function getActiveLocations() {
-  return prisma.stockLocation.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      code: true,
-      type: true,
     },
   });
 }

@@ -20,8 +20,12 @@ function getLocationOrderBy(
   ];
 }
 
-function getLocationWhere(filters: LocationListFilters): Prisma.StockLocationWhereInput {
+function getLocationWhere(
+  filters: LocationListFilters,
+  options: { locationId?: string | null } = {}
+): Prisma.StockLocationWhereInput {
   return {
+    ...(options.locationId ? { id: options.locationId } : {}),
     ...(filters.query
       ? {
           OR: [
@@ -42,8 +46,14 @@ function getLocationWhere(filters: LocationListFilters): Prisma.StockLocationWhe
   };
 }
 
-export async function getLocationListData(filters: LocationListFilters) {
-  const where = getLocationWhere(filters);
+export async function getLocationListData(
+  filters: LocationListFilters,
+  options: { locationId?: string | null } = {}
+) {
+  const where = getLocationWhere(filters, options);
+  const summaryScope: Prisma.StockLocationWhereInput = options.locationId
+    ? { id: options.locationId }
+    : {};
   const totalCount = await prisma.stockLocation.count({ where });
   const pagination = getPaginationMeta(filters.page, filters.pageSize, totalCount);
 
@@ -64,24 +74,30 @@ export async function getLocationListData(filters: LocationListFilters) {
         updatedAt: true,
       },
     }),
-    prisma.stockLocation.count(),
+    prisma.stockLocation.count({
+      where: summaryScope,
+    }),
     prisma.stockLocation.count({
       where: {
+        ...summaryScope,
         type: "WAREHOUSE",
       },
     }),
     prisma.stockLocation.count({
       where: {
+        ...summaryScope,
         type: "BRANCH",
       },
     }),
     prisma.stockLocation.count({
       where: {
+        ...summaryScope,
         isActive: true,
       },
     }),
     prisma.stockLocation.count({
       where: {
+        ...summaryScope,
         isActive: false,
       },
     }),

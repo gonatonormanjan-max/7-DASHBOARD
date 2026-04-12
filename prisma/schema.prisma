@@ -34,6 +34,13 @@ enum SalesOrderStatus {
   CANCELLED
 }
 
+enum SalesOrderVoidReason {
+  DEFECT
+  RETURNED_REFUND
+  REPLACE
+  OTHERS
+}
+
 enum PaymentMode {
   CASH
   ONLINE
@@ -70,7 +77,8 @@ model User {
   assignedLocation   StockLocation?       @relation(fields: [assignedLocationId], references: [id], onDelete: SetNull)
   accounts           Account[]
   purchaseOrders     PurchaseOrder[]
-  salesOrders        SalesOrder[]
+  createdSalesOrders SalesOrder[]         @relation("SalesOrderCreatedBy")
+  voidedSalesOrders  SalesOrder[]         @relation("SalesOrderVoidedBy")
   inventoryMovements InventoryMovement[]
   auditLogs          AuditLog[]
   productCostHistory ProductCostHistory[]
@@ -280,25 +288,33 @@ model PurchaseOrderItem {
 }
 
 model SalesOrder {
-  id            String           @id @default(uuid())
-  orderNumber   String           @unique
-  customerName  String
-  customerEmail String?
-  status        SalesOrderStatus @default(DRAFT)
-  totalAmount   Decimal          @db.Decimal(12, 2)
-  paymentMode   PaymentMode?
-  cashAmount    Decimal?         @db.Decimal(12, 2)
-  onlineAmount  Decimal?         @db.Decimal(12, 2)
-  notes         String?
-  archivedAt    DateTime?
-  createdById   String
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  createdBy     User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  items         SalesOrderItem[]
+  id                String               @id @default(uuid())
+  orderNumber       String               @unique
+  customerName      String
+  customerEmail     String?
+  status            SalesOrderStatus     @default(DRAFT)
+  totalAmount       Decimal              @db.Decimal(12, 2)
+  paymentMode       PaymentMode?
+  cashAmount        Decimal?             @db.Decimal(12, 2)
+  onlineAmount      Decimal?             @db.Decimal(12, 2)
+  notes             String?
+  archivedAt        DateTime?
+  voidReason        SalesOrderVoidReason?
+  voidRemarks       String?
+  voidDocumentation String?
+  voidedAt          DateTime?
+  createdById       String
+  voidedById        String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  createdBy         User                 @relation("SalesOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  voidedBy          User?                @relation("SalesOrderVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  items             SalesOrderItem[]
 
   @@index([status])
   @@index([createdById])
+  @@index([voidedById])
+  @@index([voidReason])
   @@index([archivedAt])
 }
 

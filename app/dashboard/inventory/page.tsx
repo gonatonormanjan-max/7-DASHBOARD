@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ArrowRight,
   Building2,
@@ -10,7 +11,7 @@ import {
   Truck,
 } from "lucide-react";
 import { hasPermission } from "@/lib/permissions";
-import { requirePermission } from "@/lib/dal/auth";
+import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getInventoryLandingData, type InventoryLocationCard } from "@/lib/dal/inventory";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
@@ -66,7 +67,18 @@ function InventoryLocationCardLink({ location }: { location: InventoryLocationCa
 
 export default async function InventoryPage() {
   const user = await requirePermission("inventory", "read");
-  const { locationCards, globalSummary } = await getInventoryLandingData();
+  const activeLocationId = await requireSalesStaffActiveLocationId({
+    user,
+    returnTo: "/dashboard/inventory",
+  });
+
+  if (user.role === "SALES_STAFF" && activeLocationId) {
+    redirect(`/dashboard/inventory/${activeLocationId}`);
+  }
+
+  const { locationCards, globalSummary } = await getInventoryLandingData({
+    locationId: user.role === "SALES_STAFF" ? activeLocationId : null,
+  });
   const canManage = hasPermission(user.role, "inventory", "update");
   const warehouses = locationCards.filter((location) => location.type === "WAREHOUSE");
   const branches = locationCards.filter((location) => location.type === "BRANCH");

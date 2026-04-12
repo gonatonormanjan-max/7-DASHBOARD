@@ -1,22 +1,16 @@
 import { getRoleLabel } from "@/lib/permissions";
 import { createUserAction } from "@/lib/actions/users";
 import { requirePermission } from "@/lib/dal/auth";
-import { getActiveLocations } from "@/lib/dal/users";
 import { getAssignableRolesForActor } from "@/lib/users";
 import { PageHeader } from "@/components/ui/page-header";
 import { UserForm } from "@/components/users/user-form";
 
 export default async function NewUserPage() {
   const user = await requirePermission("users", "create");
-  const [locations, roleOptions] = await Promise.all([
-    getActiveLocations(),
-    Promise.resolve(
-      getAssignableRolesForActor(user.role).map((role) => ({
-        value: role,
-        label: getRoleLabel(role),
-      }))
-    ),
-  ]);
+  const roleOptions = getAssignableRolesForActor(user.role).map((role) => ({
+    value: role,
+    label: getRoleLabel(role),
+  }));
 
   return (
     <div className="space-y-8">
@@ -30,7 +24,6 @@ export default async function NewUserPage() {
         action={createUserAction}
         mode="create"
         roleOptions={roleOptions}
-        locations={locations}
       />
     </div>
   );

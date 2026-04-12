@@ -3,7 +3,7 @@ import { getRoleLabel } from "@/lib/permissions";
 import { withFlashMessage } from "@/lib/flash-toast";
 import { updateUserAction } from "@/lib/actions/users";
 import { requirePermission } from "@/lib/dal/auth";
-import { getUserById, getActiveLocations } from "@/lib/dal/users";
+import { getUserById } from "@/lib/dal/users";
 import { canManageTargetUser, getAssignableRolesForActor } from "@/lib/users";
 import { PageHeader } from "@/components/ui/page-header";
 import { UserForm } from "@/components/users/user-form";
@@ -15,7 +15,7 @@ type EditUserPageProps = {
 export default async function EditUserPage({ params }: EditUserPageProps) {
   const actor = await requirePermission("users", "update");
   const { id } = await params;
-  const [user, locations] = await Promise.all([getUserById(id), getActiveLocations()]);
+  const user = await getUserById(id);
 
   if (!user) {
     notFound();
@@ -48,7 +48,6 @@ export default async function EditUserPage({ params }: EditUserPageProps) {
         isSelf={actor.id === user.id}
         mode="edit"
         roleOptions={roleOptions}
-        locations={locations}
         user={{
           id: user.id,
           firstName: user.firstName,
@@ -56,7 +55,6 @@ export default async function EditUserPage({ params }: EditUserPageProps) {
           email: user.email,
           role: user.role,
           isActive: user.isActive,
-          assignedLocationId: user.assignedLocationId,
         }}
       />
     </div>

@@ -204,6 +204,17 @@ export function DashboardSidebar({ navItems, user }: DashboardSidebarProps) {
         <p className={cn("tracking-label mt-3 text-sidebar-label text-[10px]", isCollapsed && "text-center")}>
           {isCollapsed ? roleLabel.slice(0, 3) : roleLabel}
         </p>
+        {user.role === "SALES_STAFF" ? (
+          <Link
+            className={cn(
+              "mt-2 inline-flex text-xs font-medium text-sidebar-primary/90 hover:underline",
+              isCollapsed && "hidden"
+            )}
+            href="/auth/select-location?next=/dashboard"
+          >
+            Switch working branch
+          </Link>
+        ) : null}
         <form action={signOutAction} className="mt-3">
           <Button
             className={cn("w-full", isCollapsed && "px-0")}
