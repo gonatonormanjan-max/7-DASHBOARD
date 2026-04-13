@@ -53,7 +53,7 @@ export function TopProductsChart({ data }: TopProductsChartProps) {
           <XAxis
             type="number"
             tickFormatter={(value: number) =>
-              value >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${value}`
+              value >= 1000 ? `₱${(value / 1000).toFixed(1)}k` : `₱${value}`
             }
             tick={{ fontSize: 12, fill: "#64748b" }}
           />
@@ -66,7 +66,7 @@ export function TopProductsChart({ data }: TopProductsChartProps) {
           <Tooltip
             formatter={(value, name) =>
               name === "Revenue"
-                ? [`$${Number(value).toFixed(2)}`, name]
+                ? [`₱${Number(value).toFixed(2)}`, name]
                 : [value, name]
             }
             contentStyle={{

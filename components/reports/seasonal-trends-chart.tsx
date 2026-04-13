@@ -36,9 +36,9 @@ function formatMonth(monthStr: string) {
 
 function formatCurrencyTick(value: number) {
   if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}k`;
+    return `₱${(value / 1000).toFixed(1)}k`;
   }
-  return `$${value}`;
+  return `₱${value}`;
 }
 
 export function SeasonalTrendsChart({ data, branches }: SeasonalTrendsChartProps) {
@@ -74,7 +74,7 @@ export function SeasonalTrendsChart({ data, branches }: SeasonalTrendsChartProps
             width={60}
           />
           <Tooltip
-            formatter={(value, name) => [`$${Number(value).toFixed(2)}`, name]}
+            formatter={(value, name) => [`₱${Number(value).toFixed(2)}`, name]}
             labelFormatter={(label) => formatMonth(String(label))}
             contentStyle={{
               borderRadius: "12px",

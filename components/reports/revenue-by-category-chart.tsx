@@ -63,7 +63,7 @@ export function RevenueByCategoryChart({ data }: RevenueByCategoryChartProps) {
             ))}
           </Pie>
           <Tooltip
-            formatter={(value) => [`$${Number(value).toFixed(2)}`, "Revenue"]}
+            formatter={(value) => [`₱${Number(value).toFixed(2)}`, "Revenue"]}
             contentStyle={{
               borderRadius: "12px",
               border: "1px solid #e2e8f0",

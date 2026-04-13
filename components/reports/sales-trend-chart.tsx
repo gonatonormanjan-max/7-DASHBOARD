@@ -27,9 +27,9 @@ function formatDate(dateStr: string) {
 
 function formatCurrencyTick(value: number) {
   if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}k`;
+    return `₱${(value / 1000).toFixed(1)}k`;
   }
-  return `$${value}`;
+  return `₱${value}`;
 }
 
 function formatWholeNumber(value: number) {
@@ -37,7 +37,7 @@ function formatWholeNumber(value: number) {
 }
 
 function formatCurrency(value: number) {
-  return `$${value.toFixed(2)}`;
+  return `₱${value.toFixed(2)}`;
 }
 
 export function SalesTrendChart({

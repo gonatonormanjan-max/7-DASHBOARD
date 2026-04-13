@@ -27,7 +27,7 @@ type BranchComparisonChartProps = {
 };
 
 function formatCurrency(value: number) {
-  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `₱${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function BranchComparisonChart({ data }: BranchComparisonChartProps) {
@@ -59,7 +59,7 @@ export function BranchComparisonChart({ data }: BranchComparisonChartProps) {
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               type="number"
-              tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
+              tickFormatter={(v) => `₱${(v / 1000).toFixed(1)}k`}
               tick={{ fontSize: 12, fill: "#64748b" }}
             />
             <YAxis

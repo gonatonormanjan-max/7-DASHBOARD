@@ -35,9 +35,9 @@ function formatDate(dateStr: string) {
 
 function formatCurrencyTick(value: number) {
   if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}k`;
+    return `₱${(value / 1000).toFixed(1)}k`;
   }
-  return `$${value}`;
+  return `₱${value}`;
 }
 
 export function RevenueByBranchChart({ data, branches }: RevenueByBranchChartProps) {
@@ -74,7 +74,7 @@ export function RevenueByBranchChart({ data, branches }: RevenueByBranchChartPro
             width={60}
           />
           <Tooltip
-            formatter={(value, name) => [`$${Number(value).toFixed(2)}`, name]}
+            formatter={(value, name) => [`₱${Number(value).toFixed(2)}`, name]}
             labelFormatter={(label) => formatDate(String(label))}
             contentStyle={{
               borderRadius: "12px",

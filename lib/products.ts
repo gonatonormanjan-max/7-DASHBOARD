@@ -28,9 +28,9 @@ export type ProductSortField = (typeof PRODUCT_SORT_FIELDS)[number];
 export function formatCurrency(value: number | string) {
   const numericValue = typeof value === "number" ? value : Number(value);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-PH", {
     style: "currency",
-    currency: "USD",
+    currency: "PHP",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(numericValue) ? numericValue : 0);
