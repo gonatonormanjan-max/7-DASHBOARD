@@ -44,6 +44,7 @@ function getClientIp(request: Request): string {
 }
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
+  trustHost: true,
   adapter: PrismaAdapter(prisma),
   secret: authSecret,
   session: {
