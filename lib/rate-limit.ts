@@ -26,9 +26,7 @@ async function withSerializableRetry<T>(
 ): Promise<T> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(work, {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      });
+      return await prisma.$transaction(work);
     } catch (error) {
       const isSerializationRetry =
         error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";

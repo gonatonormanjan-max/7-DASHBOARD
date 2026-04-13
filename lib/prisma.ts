@@ -16,6 +16,13 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 export const prisma =
-  globalForPrisma.prisma ?? new PrismaClient({ adapter });
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    adapter,
+    transactionOptions: {
+      maxWait: 10000, // 10s — allows for Vercel cold-start connection to Neon
+      timeout: 15000, // 15s — generous timeout for the transaction itself
+    },
+  });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
