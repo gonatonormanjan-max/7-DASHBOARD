@@ -15,24 +15,35 @@ import { prisma } from "@/lib/prisma";
 export const SALES_STAFF_ACTIVE_LOCATION_COOKIE = "salesStaffActiveLocationId";
 
 export const getCurrentUser = cache(async () => {
+  console.log("[DEBUG] getCurrentUser: calling auth()...");
   const session = await auth();
+  console.log("[DEBUG] getCurrentUser: session =", JSON.stringify(session, null, 2));
 
   if (!session?.user?.id) {
+    console.log("[DEBUG] getCurrentUser: no session or no user id, returning null");
     return null;
   }
 
-  return prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      role: true,
-      isActive: true,
-      createdAt: true,
-    },
-  });
+  console.log("[DEBUG] getCurrentUser: querying user by id:", session.user.id);
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
+    console.log("[DEBUG] getCurrentUser: user found =", user ? "yes" : "no");
+    return user;
+  } catch (error) {
+    console.error("[DEBUG] getCurrentUser: DB query failed:", error);
+    throw error;
+  }
 });
 
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
