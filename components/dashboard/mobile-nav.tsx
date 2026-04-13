@@ -40,12 +40,14 @@ type MobileBottomNavProps = {
 
 export function MobileBottomNav({ navItems }: MobileBottomNavProps) {
   const pathname = usePathname();
-  const visibleItems = navItems.slice(0, 5);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden">
-      <div className="flex items-center justify-around">
-        {visibleItems.map((item) => {
+    <nav
+      aria-label="Dashboard navigation"
+      className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
+    >
+      <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
+        {navItems.map((item) => {
           const isActive =
             item.href === "/dashboard"
               ? pathname === item.href
@@ -57,7 +59,7 @@ export function MobileBottomNav({ navItems }: MobileBottomNavProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-xl px-3 py-1.5 transition-all duration-200 active:scale-90",
+                "flex min-w-[4.75rem] flex-none flex-col items-center gap-1 rounded-xl px-3 py-1.5 text-center transition-all duration-200 active:scale-90",
                 isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
             >

@@ -20,11 +20,18 @@ function normalizeNextPath(nextPath: string | undefined) {
     return "/dashboard";
   }
 
-  if (!nextPath.startsWith("/dashboard")) {
+  const trimmed = nextPath.trim();
+  const pathname = trimmed.split("?")[0].split("#")[0];
+
+  if (!trimmed.startsWith("/dashboard")) {
     return "/dashboard";
   }
 
-  return nextPath;
+  if (pathname.split("/").some((segment) => segment === "..")) {
+    return "/dashboard";
+  }
+
+  return trimmed;
 }
 
 function getErrorMessage(error: string | undefined) {

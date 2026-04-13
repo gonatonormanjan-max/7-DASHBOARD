@@ -9,6 +9,7 @@ import {
 import { getAvailableQuantity } from "@/lib/inventory";
 import { getPaginationMeta } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
+import { businessDayStart, businessDayEnd } from "@/lib/timezone";
 import type {
   InventoryPageFilters,
   InventoryStockSortField,
@@ -23,6 +24,7 @@ const inventoryStockSelect = {
   id: true,
   quantity: true,
   reservedQty: true,
+  reorderLevel: true,
   updatedAt: true,
   product: {
     select: {
@@ -76,6 +78,8 @@ export type InventoryStockRow = {
   quantity: number;
   reservedQty: number;
   availableQty: number;
+  locationReorderLevel: number | null;
+  effectiveReorderLevel: number;
   updatedAt: Date | null;
   product: {
     id: string;
@@ -128,11 +132,11 @@ function getDateRangeWhere(filters: InventoryPageFilters) {
   const createdAt: Prisma.DateTimeFilter = {};
 
   if (filters.dateFrom) {
-    createdAt.gte = new Date(`${filters.dateFrom}T00:00:00.000`);
+    createdAt.gte = businessDayStart(filters.dateFrom);
   }
 
   if (filters.dateTo) {
-    createdAt.lte = new Date(`${filters.dateTo}T23:59:59.999`);
+    createdAt.lt = businessDayEnd(filters.dateTo);
   }
 
   return Object.keys(createdAt).length > 0 ? createdAt : undefined;
@@ -156,14 +160,20 @@ function getInventoryProductWhere(filters: InventoryPageFilters): Prisma.Product
   };
 }
 
+function resolveReorderLevel(
+  locationReorderLevel: number | null | undefined,
+  productReorderLevel: number
+): number {
+  return locationReorderLevel ?? productReorderLevel;
+}
+
 function getStockMetrics(
   quantity: number,
   reservedQty: number,
-  reorderLevel: number
+  effectiveReorderLevel: number
 ) {
   const availableQty = getAvailableQuantity(quantity, reservedQty);
-  const isLowStock =
-    reorderLevel > 0 && availableQty <= reorderLevel;
+  const isLowStock = effectiveReorderLevel > 0 && availableQty <= effectiveReorderLevel;
   const isOutOfStock = availableQty <= 0;
 
   return {
@@ -174,11 +184,14 @@ function getStockMetrics(
 }
 
 function mapStockRow(row: RawInventoryStockRow): InventoryStockRow {
+  const effectiveReorderLevel = resolveReorderLevel(row.reorderLevel, row.product.reorderLevel);
   return {
     id: row.id,
     quantity: row.quantity,
     reservedQty: row.reservedQty,
     availableQty: getAvailableQuantity(row.quantity, row.reservedQty),
+    locationReorderLevel: row.reorderLevel,
+    effectiveReorderLevel,
     updatedAt: row.updatedAt,
     product: row.product,
   };
@@ -191,7 +204,13 @@ function aggregateSystemWideStockRows(rows: RawInventoryStockRow[]) {
     const existing = groupedRows.get(row.product.id);
 
     if (!existing) {
-      groupedRows.set(row.product.id, mapStockRow(row));
+      // System-wide view aggregates all locations: use the global product
+      // reorderLevel (not any single location's override) for a consistent
+      // cross-branch threshold.
+      const mapped = mapStockRow(row);
+      mapped.locationReorderLevel = null;
+      mapped.effectiveReorderLevel = row.product.reorderLevel;
+      groupedRows.set(row.product.id, mapped);
       continue;
     }
 
@@ -323,11 +342,21 @@ export async function getInventoryLandingData(options?: {
       select: { id: true, name: true, code: true, type: true },
     }),
     prisma.locationStock.findMany({
-      where: locationId ? { locationId } : undefined,
+      where: {
+        // Only include stock rows for active locations so that deactivated
+        // locations never inflate global KPI totals (totalSkus, totalLowStock,
+        // totalOutOfStock). The per-location cards already exclude inactive
+        // locations via the locations query above — this aligns the global
+        // summary to the same scope. Historical stock data is preserved in the
+        // DB; it simply won't surface in live operational metrics.
+        location: { isActive: true },
+        ...(locationId ? { locationId } : {}),
+      },
       select: {
         locationId: true,
         quantity: true,
         reservedQty: true,
+        reorderLevel: true,
         product: { select: { id: true, reorderLevel: true } },
       },
     }),
@@ -349,9 +378,8 @@ export async function getInventoryLandingData(options?: {
 
     const lowStockCount = locationStockRows.filter((row) => {
       const availableQty = getAvailableQuantity(row.quantity, row.reservedQty);
-      return (
-        row.product.reorderLevel > 0 && availableQty <= row.product.reorderLevel
-      );
+      const threshold = resolveReorderLevel(row.reorderLevel, row.product.reorderLevel);
+      return threshold > 0 && availableQty <= threshold;
     }).length;
 
     return {
@@ -379,10 +407,8 @@ export async function getInventoryLandingData(options?: {
 
   for (const row of stockRows) {
     const availableQty = getAvailableQuantity(row.quantity, row.reservedQty);
-    if (
-      row.product.reorderLevel > 0 &&
-      availableQty <= row.product.reorderLevel
-    ) {
+    const threshold = resolveReorderLevel(row.reorderLevel, row.product.reorderLevel);
+    if (threshold > 0 && availableQty <= threshold) {
       totalLowStock++;
     }
     if (availableQty <= 0) {
@@ -509,15 +535,15 @@ export async function getInventoryPageData(
       const { isLowStock } = getStockMetrics(
         row.quantity,
         row.reservedQty,
-        row.product.reorderLevel
+        row.effectiveReorderLevel
       );
       return isLowStock;
     })
     .sort((a, b) => {
       const aAvailable = getAvailableQuantity(a.quantity, a.reservedQty);
       const bAvailable = getAvailableQuantity(b.quantity, b.reservedQty);
-      const aShortage = a.product.reorderLevel - aAvailable;
-      const bShortage = b.product.reorderLevel - bAvailable;
+      const aShortage = a.effectiveReorderLevel - aAvailable;
+      const bShortage = b.effectiveReorderLevel - bAvailable;
       return bShortage - aShortage;
     });
 

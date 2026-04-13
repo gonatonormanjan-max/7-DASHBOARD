@@ -19,19 +19,39 @@ export default function LoginPage() {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
 
-    if (result?.error) {
-      setError("Invalid email or password");
+      if (result?.code === "rate_limited") {
+        setError("Too many login attempts. Please try again later.");
+        return;
+      }
+
+      if (
+        result?.error === "CredentialsSignin" ||
+        result?.error === "AccessDenied" ||
+        result?.error === "CallbackRouteError"
+      ) {
+        setError("Invalid email or password");
+        return;
+      }
+
+      if (!result?.ok) {
+        setError("Unable to sign in right now. Please try again.");
+        return;
+      }
+
+      router.push("/dashboard");
+    } catch (error) {
+      console.error("Sign-in failed.", error);
+      setError("Unable to sign in right now. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.push("/dashboard");
   }
 
   return (

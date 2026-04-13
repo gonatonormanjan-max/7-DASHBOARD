@@ -78,10 +78,26 @@ const moduleLinks: Array<{
   },
 ];
 
-const currencyFormatter = new Intl.NumberFormat("en-PH", {
-  style: "currency",
-  currency: "PHP",
-});
+const configuredCurrencyLocale =
+  process.env.NEXT_PUBLIC_CURRENCY_LOCALE?.trim() || "en-PH";
+const configuredCurrencyCode =
+  process.env.NEXT_PUBLIC_CURRENCY_CODE?.trim().toUpperCase() || "PHP";
+
+function createCurrencyFormatter() {
+  try {
+    return new Intl.NumberFormat(configuredCurrencyLocale, {
+      style: "currency",
+      currency: configuredCurrencyCode,
+    });
+  } catch {
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+    });
+  }
+}
+
+const currencyFormatter = createCurrencyFormatter();
 
 type DashboardStatLinkCardProps = {
   label: string;

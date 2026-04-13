@@ -66,7 +66,9 @@ async function createPurchaseOrderRecord(
           supplierId: input.supplierId,
           status: "DRAFT",
           totalAmount: input.totalAmount,
-          expectedDate: input.expectedDate ? new Date(`${input.expectedDate}T00:00:00`) : null,
+          expectedDate: input.expectedDate
+            ? new Date(`${input.expectedDate}T00:00:00.000Z`)
+            : null,
           notes: input.notes,
           createdById: input.createdById,
         },
@@ -284,6 +286,32 @@ type PurchaseOrderWorkflowState = {
   message?: string;
 };
 
+type PurchaseOrderReceiveOrderItem = {
+  id: string;
+  productId: string;
+  quantity: number;
+  receivedQty: number;
+  unitCost: Prisma.Decimal;
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+  };
+};
+
+type ResolvedPurchaseOrderReceiveLine = {
+  itemId: string;
+  quantity: number;
+  orderItem: PurchaseOrderReceiveOrderItem;
+};
+
+class PurchaseOrderReceiveError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PurchaseOrderReceiveError";
+  }
+}
+
 function getOrderIdFromWorkflowForm(formData: FormData) {
   const orderId = formData.get("orderId");
   if (typeof orderId !== "string") return null;
@@ -318,10 +346,16 @@ export async function approvePurchaseOrderAction(
     return { status: "error" as const, message: "Only DRAFT orders can be approved." };
   }
 
+  const approvedAt = new Date();
+
   await prisma.$transaction(async (tx) => {
     await tx.purchaseOrder.update({
       where: { id: orderId },
-      data: { status: "APPROVED" },
+      data: {
+        status: "APPROVED",
+        approvedById: user.id,
+        approvedAt,
+      },
     });
 
     await logAudit(
@@ -330,7 +364,12 @@ export async function approvePurchaseOrderAction(
         action: "purchase_order.approve",
         entity: "purchase_order",
         entityId: orderId,
-        details: { orderNumber: order.orderNumber, status: "APPROVED" },
+        details: {
+          orderNumber: order.orderNumber,
+          status: "APPROVED",
+          approvedById: user.id,
+          approvedAt: approvedAt.toISOString(),
+        },
       },
       tx
     );
@@ -520,8 +559,17 @@ export async function receivePurchaseOrderAction(
     };
   }
 
+  const requestedReceiveQtyByItemId = new Map<string, number>();
   for (const line of receiveLines) {
-    const orderItem = orderItemsById.get(line.itemId);
+    requestedReceiveQtyByItemId.set(
+      line.itemId,
+      (requestedReceiveQtyByItemId.get(line.itemId) ?? 0) + line.quantity
+    );
+  }
+
+  const resolvedReceiveLines: ResolvedPurchaseOrderReceiveLine[] = [];
+  for (const [itemId, quantityToReceive] of requestedReceiveQtyByItemId) {
+    const orderItem = orderItemsById.get(itemId);
 
     if (!orderItem) {
       return {
@@ -532,126 +580,176 @@ export async function receivePurchaseOrderAction(
 
     const remaining = orderItem.quantity - orderItem.receivedQty;
 
-    if (line.quantity > remaining) {
+    if (quantityToReceive > remaining) {
       return {
         status: "error",
         message: `${orderItem.product.name} can only receive ${remaining} more unit${remaining === 1 ? "" : "s"}.`,
       };
     }
+
+    resolvedReceiveLines.push({
+      itemId,
+      quantity: quantityToReceive,
+      orderItem,
+    });
   }
 
-  await prisma.$transaction(async (tx) => {
-    for (const line of receiveLines) {
-      const orderItem = orderItemsById.get(line.itemId)!;
-      const stockBefore = await tx.locationStock.findUnique({
-        where: {
-          locationId_productId: {
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const line of resolvedReceiveLines) {
+        const { orderItem } = line;
+        const stockBefore = await tx.locationStock.findUnique({
+          where: {
+            locationId_productId: {
+              locationId: warehouse.id,
+              productId: orderItem.productId,
+            },
+          },
+          select: {
+            quantity: true,
+          },
+        });
+
+        const updateResult = await tx.purchaseOrderItem.updateMany({
+          where: {
+            id: orderItem.id,
+            purchaseOrderId: order.id,
+            receivedQty: { lte: orderItem.quantity - line.quantity },
+          },
+          data: {
+            receivedQty: {
+              increment: line.quantity,
+            },
+          },
+        });
+
+        if (updateResult.count === 0) {
+          const refreshedOrderItem = await tx.purchaseOrderItem.findUnique({
+            where: { id: orderItem.id },
+            select: {
+              quantity: true,
+              receivedQty: true,
+              product: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          });
+
+          if (!refreshedOrderItem) {
+            throw new PurchaseOrderReceiveError("One or more purchase order lines are invalid.");
+          }
+
+          const remaining = Math.max(
+            refreshedOrderItem.quantity - refreshedOrderItem.receivedQty,
+            0
+          );
+
+          throw new PurchaseOrderReceiveError(
+            `${refreshedOrderItem.product.name} can only receive ${remaining} more unit${remaining === 1 ? "" : "s"}.`
+          );
+        }
+
+        await tx.locationStock.upsert({
+          where: {
+            locationId_productId: {
+              locationId: warehouse.id,
+              productId: orderItem.productId,
+            },
+          },
+          create: {
             locationId: warehouse.id,
             productId: orderItem.productId,
+            quantity: line.quantity,
           },
-        },
-        select: {
-          quantity: true,
-        },
-      });
-
-      await tx.purchaseOrderItem.update({
-        where: { id: orderItem.id },
-        data: {
-          receivedQty: {
-            increment: line.quantity,
+          update: {
+            quantity: { increment: line.quantity },
           },
-        },
-      });
+        });
 
-      await tx.locationStock.upsert({
-        where: {
-          locationId_productId: {
-            locationId: warehouse.id,
+        await tx.inventoryMovement.create({
+          data: {
+            type: "PURCHASE_RECEIVED",
             productId: orderItem.productId,
+            locationId: warehouse.id,
+            quantityChange: line.quantity,
+            referenceType: "purchase_order",
+            referenceId: order.id,
+            notes: parsed.data.notes ?? `Received against ${order.orderNumber}`,
+            performedById: user.id,
           },
-        },
-        create: {
-          locationId: warehouse.id,
-          productId: orderItem.productId,
-          quantity: line.quantity,
-        },
-        update: {
-          quantity: { increment: line.quantity },
-        },
-      });
+        });
 
-      await tx.inventoryMovement.create({
-        data: {
-          type: "PURCHASE_RECEIVED",
-          productId: orderItem.productId,
+        await applyInboundMovingAverage({
+          tx,
           locationId: warehouse.id,
-          quantityChange: line.quantity,
-          referenceType: "purchase_order",
-          referenceId: order.id,
-          notes: parsed.data.notes ?? `Received against ${order.orderNumber}`,
+          productId: orderItem.productId,
+          onHandBefore: stockBefore?.quantity ?? 0,
+          inboundQty: line.quantity,
+          inboundUnitCost: orderItem.unitCost,
           performedById: user.id,
+          sourceType: "purchase_order",
+          sourceId: order.id,
+          reason: "PO receive",
+        });
+      }
+
+      const receivedQtyByItemId = new Map(
+        resolvedReceiveLines.map((line) => [line.itemId, line.quantity])
+      );
+      const refreshedItems = order.items.map((item) => ({
+        ...item,
+        receivedQty: item.receivedQty + (receivedQtyByItemId.get(item.id) ?? 0),
+      }));
+      const allReceived = refreshedItems.every((item) => item.receivedQty >= item.quantity);
+      const anyReceived = refreshedItems.some((item) => item.receivedQty > 0);
+
+      await tx.purchaseOrder.update({
+        where: { id: orderId },
+        data: {
+          status: allReceived ? "RECEIVED" : anyReceived ? "PARTIALLY_RECEIVED" : order.status,
         },
       });
 
-      await applyInboundMovingAverage({
-        tx,
-        locationId: warehouse.id,
-        productId: orderItem.productId,
-        onHandBefore: stockBefore?.quantity ?? 0,
-        inboundQty: line.quantity,
-        inboundUnitCost: orderItem.unitCost,
-        performedById: user.id,
-        sourceType: "purchase_order",
-        sourceId: order.id,
-        reason: "PO receive",
-      });
+      await logAudit(
+        {
+          userId: user.id,
+          action: "purchase_order.receive",
+          entity: "purchase_order",
+          entityId: orderId,
+          details: {
+            orderNumber: order.orderNumber,
+            warehouseId: warehouse.id,
+            warehouseName: warehouse.name,
+            notes: parsed.data.notes,
+            items: resolvedReceiveLines.map((line) => {
+              const { orderItem } = line;
+
+              return {
+                itemId: line.itemId,
+                productId: orderItem.productId,
+                productName: orderItem.product.name,
+                sku: orderItem.product.sku,
+                quantityReceived: line.quantity,
+                unitCost: orderItem.unitCost.toString(),
+              };
+            }),
+          },
+        },
+        tx
+      );
+    });
+  } catch (error) {
+    if (error instanceof PurchaseOrderReceiveError) {
+      return {
+        status: "error",
+        message: error.message,
+      };
     }
 
-    const refreshedItems = order.items.map((item) => {
-      const matchedLine = receiveLines.find((line) => line.itemId === item.id);
-      return {
-        ...item,
-        receivedQty: item.receivedQty + (matchedLine?.quantity ?? 0),
-      };
-    });
-    const allReceived = refreshedItems.every((item) => item.receivedQty >= item.quantity);
-    const anyReceived = refreshedItems.some((item) => item.receivedQty > 0);
-
-    await tx.purchaseOrder.update({
-      where: { id: orderId },
-      data: {
-        status: allReceived ? "RECEIVED" : anyReceived ? "PARTIALLY_RECEIVED" : order.status,
-      },
-    });
-
-    await logAudit(
-      {
-        userId: user.id,
-        action: "purchase_order.receive",
-        entity: "purchase_order",
-        entityId: orderId,
-        details: {
-          orderNumber: order.orderNumber,
-          warehouseId: warehouse.id,
-          warehouseName: warehouse.name,
-          notes: parsed.data.notes,
-          items: receiveLines.map((line) => {
-            const orderItem = orderItemsById.get(line.itemId)!;
-            return {
-              itemId: line.itemId,
-              productId: orderItem.productId,
-              productName: orderItem.product.name,
-              sku: orderItem.product.sku,
-              quantityReceived: line.quantity,
-              unitCost: orderItem.unitCost.toString(),
-            };
-          }),
-        },
-      },
-      tx
-    );
-  });
+    throw error;
+  }
 
   revalidatePurchaseOrderPaths({ orderId, locationIds: [warehouse.id] });
   redirect(

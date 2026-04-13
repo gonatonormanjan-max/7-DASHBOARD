@@ -11,35 +11,42 @@ export async function proxy(request: NextRequest) {
   const isSelectLocationPage = pathname.startsWith("/auth/select-location");
   const isDashboard = pathname.startsWith("/dashboard");
 
-  const token =
-    request.cookies.get("authjs.session-token")?.value ||
-    request.cookies.get("__Secure-authjs.session-token")?.value;
+  // Validate the JWT once at the top — all redirect decisions use this result.
+  // Previously the proxy checked raw cookie presence (a string), which is truthy
+  // even when the JWT inside is expired or invalidated (e.g. after AUTH_SECRET
+  // rotation). That caused a redirect loop: cookie present → redirect to
+  // /dashboard → server-side requireUser() rejects invalid token → redirect back
+  // to /auth/login → repeat. Using getToken() here makes "authenticated" mean
+  // "has a valid, verifiable JWT" — the same thing requireUser() checks server-side.
+  const authToken = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  });
+  const isAuthenticated = Boolean(authToken);
 
   if (isRegisterPage) {
     return NextResponse.redirect(
-      new URL(token ? "/dashboard" : "/auth/login", request.url)
+      new URL(isAuthenticated ? "/dashboard" : "/auth/login", request.url)
     );
   }
 
-  if (isSelectLocationPage && !token) {
+  if (isSelectLocationPage && !isAuthenticated) {
     return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
-  // Redirect authenticated users away from auth pages
-  if (isAuthPage && token && !isSelectLocationPage) {
+  // Redirect authenticated users away from auth pages (except select-location,
+  // which authenticated SALES_STAFF need to visit on first dashboard access).
+  if (isAuthPage && isAuthenticated && !isSelectLocationPage) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  // Redirect unauthenticated users to login
-  if (isDashboard && !token) {
+  // Redirect unauthenticated users away from protected pages.
+  if (isDashboard && !isAuthenticated) {
     return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
-  if (isDashboard && token) {
-    const authToken = await getToken({
-      req: request,
-      secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-    });
+  // Enforce branch selection for SALES_STAFF before they reach any dashboard page.
+  if (isDashboard && isAuthenticated) {
     const role = typeof authToken?.role === "string" ? authToken.role : null;
     const hasSelectedLocation = Boolean(
       request.cookies.get(SALES_STAFF_ACTIVE_LOCATION_COOKIE)?.value?.trim()

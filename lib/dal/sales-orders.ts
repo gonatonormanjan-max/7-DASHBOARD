@@ -8,6 +8,7 @@ import {
   SalesOrderStatus,
   SalesOrderVoidReason,
 } from "@prisma/client";
+import { businessDayStart, businessDayEnd, businessStartOfToday } from "@/lib/timezone";
 import { getAvailableQuantity } from "@/lib/inventory";
 import {
   DEFAULT_PAGE,
@@ -90,13 +91,14 @@ function getCreatedAtFilter(filters: SalesOrderDataFilters) {
     const createdAt: Prisma.DateTimeFilter = {};
 
     if (filters.dateFrom) {
-      createdAt.gte = new Date(`${filters.dateFrom}T00:00:00`);
+      // Use business-timezone midnight so "from April 13" means April 13 00:00
+      // Asia/Manila, not UTC midnight (which would be 08:00 Manila time).
+      createdAt.gte = businessDayStart(filters.dateFrom);
     }
 
     if (filters.dateTo) {
-      const endOfDay = new Date(`${filters.dateTo}T00:00:00`);
-      endOfDay.setDate(endOfDay.getDate() + 1);
-      createdAt.lt = endOfDay;
+      // Exclusive upper bound = start of the next business day in Manila time.
+      createdAt.lt = businessDayEnd(filters.dateTo);
     }
 
     return createdAt;
@@ -106,14 +108,13 @@ function getCreatedAtFilter(filters: SalesOrderDataFilters) {
     return undefined;
   }
 
-  const since = new Date();
-
   if (filters.window === "today") {
-    since.setHours(0, 0, 0, 0);
-  } else {
-    since.setDate(since.getDate() - (filters.window === "7d" ? 7 : 30));
+    // "Today" = midnight of the current business day in Asia/Manila.
+    return { gte: businessStartOfToday() } satisfies Prisma.DateTimeFilter;
   }
 
+  const since = new Date();
+  since.setDate(since.getDate() - (filters.window === "7d" ? 7 : 30));
   return { gte: since } satisfies Prisma.DateTimeFilter;
 }
 

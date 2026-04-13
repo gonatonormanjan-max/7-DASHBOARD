@@ -1,6 +1,7 @@
 import "server-only";
 
 import { LocationType, Prisma, ProductStatus } from "@prisma/client";
+import { businessDayStart, businessDayEnd } from "@/lib/timezone";
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
@@ -35,13 +36,11 @@ function buildPurchaseOrderWhere(
     const createdAt: Prisma.DateTimeFilter = {};
 
     if (normalized.dateFrom) {
-      createdAt.gte = new Date(`${normalized.dateFrom}T00:00:00`);
+      createdAt.gte = businessDayStart(normalized.dateFrom);
     }
 
     if (normalized.dateTo) {
-      const endOfDay = new Date(`${normalized.dateTo}T00:00:00`);
-      endOfDay.setDate(endOfDay.getDate() + 1);
-      createdAt.lt = endOfDay;
+      createdAt.lt = businessDayEnd(normalized.dateTo);
     }
 
     clauses.push({ createdAt });
@@ -135,8 +134,13 @@ export async function getPurchaseOrderListData(filters: Partial<PurchaseOrderLis
       draft: groupedSummary.find((group) => group.status === "DRAFT")?._count._all ?? 0,
       approved:
         groupedSummary.find((group) => group.status === "APPROVED")?._count._all ?? 0,
+      partiallyReceived:
+        groupedSummary.find((group) => group.status === "PARTIALLY_RECEIVED")?._count._all ??
+        0,
       received:
         groupedSummary.find((group) => group.status === "RECEIVED")?._count._all ?? 0,
+      cancelled:
+        groupedSummary.find((group) => group.status === "CANCELLED")?._count._all ?? 0,
     },
   };
 }

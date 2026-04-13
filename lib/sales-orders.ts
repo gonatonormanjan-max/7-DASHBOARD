@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   PaymentMode,
   Role,
@@ -41,7 +42,7 @@ export function getSalesOrderStatusBadgeClass(status: SalesOrderStatus) {
     case "CONFIRMED":
       return "border-[#cfe0f4] bg-[#edf5ff] text-[#16324b]";
     case "DELIVERED":
-      return "border-[#c5e7db] bg-[#edf8f4] text-[#11664b]";
+      return "border-[#b8dff0] bg-[#eaf5fb] text-[#0f4f66]";
     case "COMPLETED":
       return "border-[#c5e7db] bg-[#edf8f4] text-[#0a4429]";
     case "CANCELLED":
@@ -78,9 +79,7 @@ export function buildSalesOrderNumber() {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
-  const random = Math.floor(Math.random() * 10000)
-    .toString()
-    .padStart(4, "0");
+  const randomSuffix = randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase();
 
-  return `SO-${year}${month}${day}-${random}`;
+  return `SO-${year}${month}${day}-${randomSuffix}`;
 }

@@ -13,7 +13,12 @@ function normalizeNextPath(nextPath: string | null) {
   }
 
   const trimmed = nextPath.trim();
+  const pathname = trimmed.split("?")[0].split("#")[0];
   if (!trimmed.startsWith("/dashboard")) {
+    return "/dashboard";
+  }
+
+  if (pathname.split("/").some((segment) => segment === "..")) {
     return "/dashboard";
   }
 

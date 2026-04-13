@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { logServerWarning } from "@/lib/logger";
 
 export const MOVING_AVERAGE_VALUATION_METHOD = "Moving Average (per location)";
 export const COST_SHOCK_WARNING_THRESHOLD = 0.1;
@@ -22,6 +23,18 @@ type ApplyInboundMovingAverageInput = {
   onHandBefore: number;
   inboundQty: number;
   inboundUnitCost: DecimalInput;
+  performedById: string;
+  sourceType: string;
+  sourceId?: string | null;
+  reason?: string | null;
+};
+
+type RecordOutboundCostHistoryInput = {
+  tx: CostingClient;
+  locationId: string;
+  productId: string;
+  outboundQty: number;
+  outboundUnitCost: DecimalInput;
   performedById: string;
   sourceType: string;
   sourceId?: string | null;
@@ -59,12 +72,12 @@ function logMissingCostingTableWarning(context: string, error: unknown) {
 
   hasLoggedMissingCostingTable = true;
   const detail = error instanceof Error ? error.message : "Unknown Prisma error.";
-  console.warn(
-    `[costing] Missing costing tables while ${context}. ` +
-      "Falling back to product default cost and skipping moving-average persistence. " +
-      "Apply pending Prisma migrations to restore full costing behavior. " +
-      `Detail: ${detail}`
-  );
+  logServerWarning("costing.missing_costing_tables", {
+    context,
+    detail,
+    fallback:
+      "Using product default cost and skipping moving-average persistence until migrations are applied.",
+  });
 }
 
 export function isMissingCostingTableError(error: unknown) {
@@ -253,6 +266,71 @@ export async function syncLocationCostSnapshot(
     }
     updateCostingPersistenceCache(false);
     logMissingCostingTableWarning("syncing location cost snapshot", error);
+  }
+}
+
+export async function recordOutboundCostHistory({
+  tx,
+  locationId,
+  productId,
+  outboundQty,
+  outboundUnitCost,
+  performedById,
+  sourceType,
+  sourceId = null,
+  reason = null,
+}: RecordOutboundCostHistoryInput): Promise<void> {
+  const outboundQtyWhole = Math.max(0, Math.floor(outboundQty));
+
+  if (outboundQtyWhole === 0) {
+    return;
+  }
+
+  const outboundCostDecimal = toMoneyDecimal(outboundUnitCost);
+
+  if (!(await isCostingPersistenceAvailable(tx))) {
+    return;
+  }
+
+  try {
+    const existingCost = await tx.locationProductCost.findUnique({
+      where: {
+        locationId_productId: {
+          locationId,
+          productId,
+        },
+      },
+      select: {
+        avgUnitCost: true,
+      },
+    });
+
+    const avgUnitCostDecimal =
+      existingCost?.avgUnitCost && existingCost.avgUnitCost.toNumber() > 0
+        ? existingCost.avgUnitCost
+        : outboundCostDecimal;
+
+    await tx.productCostHistory.create({
+      data: {
+        locationId,
+        productId,
+        inboundQty: -outboundQtyWhole,
+        inboundUnitCost: outboundCostDecimal,
+        prevAvgUnitCost: avgUnitCostDecimal,
+        newAvgUnitCost: avgUnitCostDecimal,
+        sourceType,
+        sourceId,
+        changePct: toPercentDecimal(0),
+        reason,
+        changedById: performedById,
+      },
+    });
+  } catch (error) {
+    if (!isMissingCostingTableError(error)) {
+      throw error;
+    }
+    updateCostingPersistenceCache(false);
+    logMissingCostingTableWarning("recording outbound cost history", error);
   }
 }
 

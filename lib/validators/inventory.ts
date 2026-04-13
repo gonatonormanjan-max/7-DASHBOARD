@@ -109,7 +109,7 @@ export const inventoryTransferSchema = z
 
 const supplierReceiptItemSchema = z.object({
   productId: z.string().uuid(),
-  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1."),
   unitCost: z.coerce.number().min(0, "Unit cost cannot be negative."),
 });
 

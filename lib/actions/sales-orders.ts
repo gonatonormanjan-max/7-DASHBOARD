@@ -1,6 +1,5 @@
 "use server";
 
-import { randomInt } from "node:crypto";
 import {
   LocationType,
   Prisma,
@@ -27,6 +26,7 @@ import {
 } from "@/lib/sales-order-payments";
 import {
   SALES_ORDER_ARCHIVEABLE_STATUSES,
+  buildSalesOrderNumber,
   canArchiveSalesOrder,
   canManageSalesOrderArchive,
   formatSalesOrderVoidReason,
@@ -45,6 +45,13 @@ type SalesOrderWorkflowActionState = {
   status: "idle" | "success" | "error";
   message?: string;
 };
+
+class SalesOrderWorkflowError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SalesOrderWorkflowError";
+  }
+}
 
 export type VoidSalesOrderState = SalesOrderWorkflowActionState;
 
@@ -105,10 +112,6 @@ type PreparedSalesOrderCostedItem = PreparedSalesOrderItem & {
 
 function toMoney(value: number) {
   return new Prisma.Decimal(value.toFixed(2));
-}
-
-function generateSalesOrderNumber() {
-  return `SO-${Date.now().toString(36).toUpperCase()}-${randomInt(100, 1000)}`;
 }
 
 function buildFormValueMap(values: ReturnType<typeof extractSalesOrderFormValues>) {
@@ -285,6 +288,7 @@ async function createSalesOrderRecord(
   input: {
     customerName: string;
     customerEmail: string | null;
+    locationId: string | null;
     notes: string | null;
     totalAmount: Prisma.Decimal;
     status: SalesOrderStatus;
@@ -298,9 +302,10 @@ async function createSalesOrderRecord(
     try {
       return await tx.salesOrder.create({
         data: {
-          orderNumber: generateSalesOrderNumber(),
+          orderNumber: buildSalesOrderNumber(),
           customerName: input.customerName,
           customerEmail: input.customerEmail,
+          locationId: input.locationId,
           notes: input.notes,
           status: input.status,
           totalAmount: input.totalAmount,
@@ -382,27 +387,50 @@ function isOutsideSalesStaffScope(
 
 async function getStockSnapshotsForRequirements(
   client: Prisma.TransactionClient | typeof prisma,
-  requirements: StockRequirement[]
+  requirements: StockRequirement[],
+  options: {
+    lockForUpdate?: boolean;
+  } = {}
 ): Promise<Map<string, SalesStockSnapshot>> {
   if (requirements.length === 0) {
     return new Map();
   }
 
-  const stockRows = await client.locationStock.findMany({
-    where: {
-      OR: requirements.map((requirement) => ({
-        productId: requirement.productId,
-        locationId: requirement.locationId,
-      })),
-    },
-    select: {
-      id: true,
-      productId: true,
-      locationId: true,
-      quantity: true,
-      reservedQty: true,
-    },
-  });
+  const stockRows = options.lockForUpdate
+    ? await client.$queryRaw<
+        Array<{
+          productId: string;
+          locationId: string;
+          quantity: number;
+          reservedQty: number;
+        }>
+      >(Prisma.sql`
+        SELECT "productId", "locationId", "quantity", "reservedQty"
+        FROM "LocationStock"
+        WHERE ${Prisma.join(
+          requirements.map(
+            (requirement) =>
+              Prisma.sql`("productId" = ${requirement.productId} AND "locationId" = ${requirement.locationId})`
+          ),
+          " OR "
+        )}
+        ORDER BY "locationId", "productId"
+        FOR UPDATE
+      `)
+    : await client.locationStock.findMany({
+        where: {
+          OR: requirements.map((requirement) => ({
+            productId: requirement.productId,
+            locationId: requirement.locationId,
+          })),
+        },
+        select: {
+          productId: true,
+          locationId: true,
+          quantity: true,
+          reservedQty: true,
+        },
+      });
 
   return new Map(
     stockRows.map((row) => [
@@ -595,14 +623,20 @@ export async function bulkArchiveSalesOrdersAction(olderThanDays: number) {
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - olderThanDays);
+  const archiveWhere = {
+    archivedAt: null,
+    createdAt: { lt: cutoff },
+    status: { in: SALES_ORDER_ARCHIVEABLE_STATUSES },
+  } as const;
 
   const result = await prisma.$transaction(async (tx) => {
+    const ordersToArchive = await tx.salesOrder.findMany({
+      where: archiveWhere,
+      select: { id: true, orderNumber: true },
+    });
+
     const updatedOrders = await tx.salesOrder.updateMany({
-      where: {
-        archivedAt: null,
-        createdAt: { lt: cutoff },
-        status: { in: SALES_ORDER_ARCHIVEABLE_STATUSES },
-      },
+      where: { id: { in: ordersToArchive.map((order) => order.id) } },
       data: { archivedAt: new Date() },
     });
 
@@ -612,7 +646,12 @@ export async function bulkArchiveSalesOrdersAction(olderThanDays: number) {
         action: "sales_order.bulk_archive",
         entity: "sales_order",
         entityId: "bulk",
-        details: { olderThanDays, archivedCount: updatedOrders.count },
+        details: {
+          olderThanDays,
+          archivedCount: updatedOrders.count,
+          orderIds: ordersToArchive.map((order) => order.id),
+          orderNumbers: ordersToArchive.map((order) => order.orderNumber),
+        },
       },
       tx
     );
@@ -886,12 +925,20 @@ export async function createSalesOrderAction(
     };
   });
 
+  // ── UX fast-fail (approximate, not authoritative) ───────────────────────────
+  // This pre-transaction check is a courtesy: it surfaces per-item error
+  // highlights in the cart UI so the user knows which lines to fix before
+  // resubmitting. Because it runs outside the transaction it is NOT race-safe —
+  // two concurrent "record now" requests can both pass it. The authoritative,
+  // race-safe check runs inside the $transaction with a FOR UPDATE row lock
+  // (see the `intent !== "draft"` block below). This check aborting early is an
+  // optimisation; the locked check will abort even if this one is bypassed.
   if (intent !== "draft") {
-    const requirements = buildStockRequirements(orderItemsForValidation);
-    const stockSnapshots = await getStockSnapshotsForRequirements(prisma, requirements);
-    const shortages = findAvailableStockShortages(requirements, stockSnapshots);
+    const uxRequirements = buildStockRequirements(orderItemsForValidation);
+    const uxSnapshots = await getStockSnapshotsForRequirements(prisma, uxRequirements);
+    const uxShortages = findAvailableStockShortages(uxRequirements, uxSnapshots);
 
-    if (shortages.length > 0) {
+    if (uxShortages.length > 0) {
       return {
         status: "error",
         message: "Some cart lines exceed the available stock.",
@@ -899,7 +946,7 @@ export async function createSalesOrderAction(
           items: ["Reduce or remove the highlighted cart lines before recording the sale."],
           itemsPayload: ["Reduce or remove the highlighted cart lines before recording the sale."],
         },
-        itemErrors: buildStockShortageItemErrors(preparedItems, shortages),
+        itemErrors: buildStockShortageItemErrors(preparedItems, uxShortages),
         values: fieldValues,
       };
     }
@@ -907,10 +954,19 @@ export async function createSalesOrderAction(
 
   const affectedLocationIds = [...new Set(preparedItems.map((item) => item.locationId))];
 
-  const order = await prisma.$transaction(async (tx) => {
+  // Build requirements once outside the transaction so the object is available
+  // for both the locked in-transaction check and the post-transaction item loop.
+  const directSaleRequirements =
+    intent !== "draft" ? buildStockRequirements(orderItemsForValidation) : [];
+
+  let order: Awaited<ReturnType<typeof createSalesOrderRecord>>;
+
+  try {
+    order = await prisma.$transaction(async (tx) => {
     const createdOrder = await createSalesOrderRecord(tx, {
       customerName,
         customerEmail: parsed.data.customerEmail || null,
+        locationId: parsed.data.locationId ?? null,
         notes: parsed.data.notes,
         totalAmount: toMoney(totalAmount),
         status: intent === "draft" ? SalesOrderStatus.DRAFT : SalesOrderStatus.COMPLETED,
@@ -967,29 +1023,28 @@ export async function createSalesOrderAction(
     });
 
     if (intent !== "draft") {
-      const uniqueStockPairs = Array.from(
-        new Map(
-          costedItems.map((item) => [
-            `${item.productId}:${item.locationId}`,
-            {
-              productId: item.productId,
-              locationId: item.locationId,
-            },
-          ])
-        ).values()
+      // ── Race-safe stock check ─────────────────────────────────────────────
+      // Acquire FOR UPDATE row locks on every affected stock row before reading
+      // quantities. This serialises concurrent "record now" requests for the
+      // same items: the second request waits for the first to commit, then
+      // reads the post-decrement quantity — which may now be insufficient.
+      const lockedSnapshots = await getStockSnapshotsForRequirements(
+        tx,
+        directSaleRequirements,
+        { lockForUpdate: true }
       );
-      const stockRows = await tx.locationStock.findMany({
-        where: {
-          OR: uniqueStockPairs,
-        },
-        select: {
-          productId: true,
-          locationId: true,
-          quantity: true,
-        },
-      });
+      const shortages = findAvailableStockShortages(directSaleRequirements, lockedSnapshots);
+
+      if (shortages.length > 0) {
+        throw new SalesOrderWorkflowError(
+          buildStockShortageMessage(shortages)
+        );
+      }
+
+      // Build onHandByKey from the locked snapshots — avoids a redundant
+      // second query and guarantees consistency with the locked values.
       const onHandByKey = new Map(
-        stockRows.map((row) => [`${row.productId}:${row.locationId}`, row.quantity])
+        [...lockedSnapshots.entries()].map(([key, snap]) => [key, snap.quantity])
       );
 
       for (const item of costedItems) {
@@ -1006,17 +1061,30 @@ export async function createSalesOrderAction(
           },
         });
 
-        await tx.locationStock.update({
+        // Guarded decrement: only proceed if quantity is still sufficient.
+        // The FOR UPDATE lock above means no other transaction can modify these
+        // rows between the check and this update, so count === 0 is a true
+        // shortage (not a race artefact) and should abort the transaction.
+        const stockUpdateResult = await tx.locationStock.updateMany({
           where: {
-            locationId_productId: {
-              locationId: item.locationId,
-              productId: item.productId,
-            },
+            locationId: item.locationId,
+            productId: item.productId,
+            quantity: { gte: item.quantity },
           },
           data: {
             quantity: { decrement: item.quantity },
           },
         });
+
+        if (stockUpdateResult.count === 0) {
+          const productName = productsById.get(item.productId)?.name ?? item.productId;
+          const productSku = productsById.get(item.productId)?.sku ?? "UNKNOWN";
+          const locationName = locationsById.get(item.locationId)?.name ?? item.locationId;
+          throw new SalesOrderWorkflowError(
+            `Insufficient stock for ${productName} (${productSku}) at ${locationName}. ` +
+            `The sale could not be recorded.`
+          );
+        }
 
         const key = `${item.productId}:${item.locationId}`;
         const previousOnHand = onHandByKey.get(key) ?? 0;
@@ -1063,8 +1131,25 @@ export async function createSalesOrderAction(
       tx
     );
 
-    return createdOrder;
-  });
+      return createdOrder;
+    });
+  } catch (error) {
+    if (error instanceof SalesOrderWorkflowError) {
+      // Stock shortage detected inside the transaction — surface it as a form error.
+      return {
+        status: "error" as const,
+        message: error.message,
+        fieldErrors: {
+          items: ["Adjust quantities or remove the affected cart lines and try again."],
+          itemsPayload: ["Adjust quantities or remove the affected cart lines and try again."],
+        },
+        values: fieldValues,
+      };
+    }
+
+    // Re-throw everything else (Next.js redirect signals, unexpected DB errors, etc.)
+    throw error;
+  }
 
   revalidateSalesOrderPaths({ orderId: order.id, locationIds: affectedLocationIds });
 
@@ -1100,23 +1185,32 @@ async function runConfirmSalesOrderAction(orderId: string) {
   }
 
   const requirements = buildStockRequirements(order.items as OrderMutationItem[]);
-  const stockSnapshots = await getStockSnapshotsForRequirements(prisma, requirements);
-  const shortages = findAvailableStockShortages(requirements, stockSnapshots);
-
-  if (shortages.length > 0) {
-    return {
-      status: "error" as const,
-      message: buildStockShortageMessage(shortages),
-    };
-  }
-
   const locationIds = [...new Set(order.items.map((item) => item.locationId))];
 
-  await prisma.$transaction(async (tx) => {
-    await tx.salesOrder.update({
-      where: { id: orderId },
+  const transactionResult = await prisma.$transaction(async (tx) => {
+    const stockSnapshots = await getStockSnapshotsForRequirements(tx, requirements, {
+      lockForUpdate: true,
+    });
+    const shortages = findAvailableStockShortages(requirements, stockSnapshots);
+
+    if (shortages.length > 0) {
+      return {
+        status: "error" as const,
+        message: buildStockShortageMessage(shortages),
+      };
+    }
+
+    const updateResult = await tx.salesOrder.updateMany({
+      where: { id: orderId, status: "DRAFT" },
       data: { status: "CONFIRMED" },
     });
+
+    if (updateResult.count === 0) {
+      return {
+        status: "error" as const,
+        message: "Only DRAFT orders can be confirmed.",
+      };
+    }
 
     for (const requirement of requirements) {
       await tx.locationStock.update({
@@ -1146,7 +1240,13 @@ async function runConfirmSalesOrderAction(orderId: string) {
       },
       tx
     );
+
+    return { status: "success" as const };
   });
+
+  if (transactionResult.status === "error") {
+    return transactionResult;
+  }
 
   revalidateSalesOrderPaths({ orderId, locationIds });
   return { status: "success" as const, message: `Order ${order.orderNumber} confirmed.` };
@@ -1177,102 +1277,148 @@ async function runDeliverSalesOrderAction(orderId: string) {
   }
 
   const requirements = buildStockRequirements(order.items as OrderMutationItem[]);
-  const stockSnapshots = await getStockSnapshotsForRequirements(prisma, requirements);
-  const blockers = findDeliveryBlockers(requirements, stockSnapshots);
-
-  if (blockers.length > 0) {
-    return {
-      status: "error" as const,
-      message: buildDeliveryBlockerMessage(blockers),
-    };
-  }
-
+  const requirementsByKey = new Map(
+    requirements.map((requirement) => [
+      `${requirement.productId}:${requirement.locationId}`,
+      requirement,
+    ])
+  );
   const locationIds = [...new Set(order.items.map((item) => item.locationId))];
 
-  await prisma.$transaction(async (tx) => {
-    await tx.salesOrder.update({
-      where: { id: orderId },
-      data: { status: "DELIVERED" },
-    });
+  let transactionResult:
+    | { status: "success" }
+    | { status: "error"; message: string };
 
-    const uniqueStockPairs = Array.from(
-      new Map(
-        order.items.map((item) => [
-          `${item.productId}:${item.locationId}`,
-          {
+  try {
+    transactionResult = await prisma.$transaction(async (tx) => {
+      const stockSnapshots = await getStockSnapshotsForRequirements(tx, requirements, {
+        lockForUpdate: true,
+      });
+      const blockers = findDeliveryBlockers(requirements, stockSnapshots);
+
+      if (blockers.length > 0) {
+        return {
+          status: "error" as const,
+          message: buildDeliveryBlockerMessage(blockers),
+        };
+      }
+
+      const updateResult = await tx.salesOrder.updateMany({
+        where: { id: orderId, status: "CONFIRMED" },
+        data: { status: "DELIVERED" },
+      });
+
+      if (updateResult.count === 0) {
+        return {
+          status: "error" as const,
+          message: "Only CONFIRMED orders can be delivered.",
+        };
+      }
+
+      const onHandByKey = new Map(
+        [...stockSnapshots.entries()].map(([key, snapshot]) => [key, snapshot.quantity])
+      );
+
+      for (const item of order.items) {
+        await tx.inventoryMovement.create({
+          data: {
+            type: "SALES_FULFILLED",
             productId: item.productId,
             locationId: item.locationId,
+            quantityChange: -item.quantity,
+            referenceType: "sales_order",
+            referenceId: orderId,
+            notes: `Fulfilled for order ${order.orderNumber}`,
+            performedById: user.id,
           },
-        ])
-      ).values()
-    );
-    const stockRows = await tx.locationStock.findMany({
-      where: {
-        OR: uniqueStockPairs,
-      },
-      select: {
-        productId: true,
-        locationId: true,
-        quantity: true,
-      },
-    });
-    const onHandByKey = new Map(
-      stockRows.map((row) => [`${row.productId}:${row.locationId}`, row.quantity])
-    );
+        });
 
-    for (const item of order.items) {
-      await tx.inventoryMovement.create({
-        data: {
-          type: "SALES_FULFILLED",
-          productId: item.productId,
+        const stockUpdateResult = await tx.locationStock.updateMany({
+          where: {
+            locationId: item.locationId,
+            productId: item.productId,
+            quantity: { gte: item.quantity },
+            reservedQty: { gte: item.quantity },
+          },
+          data: {
+            quantity: { decrement: item.quantity },
+            reservedQty: { decrement: item.quantity },
+          },
+        });
+
+        if (stockUpdateResult.count === 0) {
+          const key = `${item.productId}:${item.locationId}`;
+          const requirement = requirementsByKey.get(key);
+          const latestStock = await tx.locationStock.findUnique({
+            where: {
+              locationId_productId: {
+                locationId: item.locationId,
+                productId: item.productId,
+              },
+            },
+            select: {
+              quantity: true,
+              reservedQty: true,
+            },
+          });
+
+          if (!requirement) {
+            throw new SalesOrderWorkflowError(
+              "This order cannot be delivered yet. Reconfirm stock before delivering."
+            );
+          }
+
+          const onHand = latestStock?.quantity ?? 0;
+          const reserved = latestStock?.reservedQty ?? 0;
+          const blocker: DeliveryBlocker = {
+            ...requirement,
+            kind: reserved < requirement.quantity ? "reservation" : "on_hand",
+            onHand,
+            reserved,
+          };
+
+          throw new SalesOrderWorkflowError(buildDeliveryBlockerMessage([blocker]));
+        }
+
+        const key = `${item.productId}:${item.locationId}`;
+        const previousOnHand = onHandByKey.get(key) ?? 0;
+        const nextOnHand = previousOnHand - item.quantity;
+        onHandByKey.set(key, nextOnHand);
+
+        await syncLocationCostSnapshot(tx, {
           locationId: item.locationId,
-          quantityChange: -item.quantity,
-          referenceType: "sales_order",
-          referenceId: orderId,
-          notes: `Fulfilled for order ${order.orderNumber}`,
-          performedById: user.id,
-        },
-      });
+          productId: item.productId,
+          onHandQtySnapshot: nextOnHand,
+        });
+      }
 
-      await tx.locationStock.update({
-        where: {
-          locationId_productId: {
-            locationId: item.locationId,
-            productId: item.productId,
+      await logAudit(
+        {
+          userId: user.id,
+          action: "sales_order.deliver",
+          entity: "sales_order",
+          entityId: orderId,
+          details: {
+            orderNumber: order.orderNumber,
+            itemCount: order.items.length,
           },
         },
-        data: {
-          quantity: { decrement: item.quantity },
-          reservedQty: { decrement: item.quantity },
-        },
-      });
+        tx
+      );
 
-      const key = `${item.productId}:${item.locationId}`;
-      const previousOnHand = onHandByKey.get(key) ?? 0;
-      const nextOnHand = previousOnHand - item.quantity;
-      onHandByKey.set(key, nextOnHand);
-
-      await syncLocationCostSnapshot(tx, {
-        locationId: item.locationId,
-        productId: item.productId,
-        onHandQtySnapshot: nextOnHand,
-      });
+      return { status: "success" as const };
+    });
+  } catch (error) {
+    if (error instanceof SalesOrderWorkflowError) {
+      return { status: "error" as const, message: error.message };
     }
 
-    await logAudit(
-      {
-        userId: user.id,
-        action: "sales_order.deliver",
-        entity: "sales_order",
-        entityId: orderId,
-        details: {
-          orderNumber: order.orderNumber,
-          itemCount: order.items.length,
-        },
-      },
-      tx
-    );
-  });
+    throw error;
+  }
+
+  if (transactionResult.status === "error") {
+    return transactionResult;
+  }
 
   revalidateSalesOrderPaths({ orderId, locationIds });
   return { status: "success" as const, message: `Order ${order.orderNumber} marked as delivered.` };
@@ -1371,22 +1517,41 @@ async function runCancelSalesOrderAction(orderId: string) {
   const wasConfirmed = order.status === "CONFIRMED";
   const locationIds = wasConfirmed ? [...new Set(order.items.map((item) => item.locationId))] : [];
 
-  await prisma.$transaction(async (tx) => {
-    await tx.salesOrder.update({
-      where: { id: orderId },
+  const transactionResult = await prisma.$transaction(async (tx) => {
+    // Atomic status guard: only cancel if the order is still in a cancellable
+    // state (DRAFT or CONFIRMED). Using updateMany lets us express the expected
+    // current state as part of the WHERE clause so two concurrent cancel requests
+    // — or a cancel racing a deliver/complete — cannot both succeed. Whichever
+    // request wins the row lock transitions the status; the loser sees count === 0.
+    const cancelResult = await tx.salesOrder.updateMany({
+      where: {
+        id: orderId,
+        status: { in: ["DRAFT", "CONFIRMED"] },
+      },
       data: { status: "CANCELLED" },
     });
+
+    if (cancelResult.count === 0) {
+      // Another request already changed the status — bail out cleanly.
+      return {
+        status: "error" as const,
+        message: "This order has already been updated by another request. Please refresh and try again.",
+      };
+    }
 
     if (wasConfirmed) {
       const requirements = buildStockRequirements(order.items as OrderMutationItem[]);
 
       for (const req of requirements) {
-        await tx.locationStock.update({
+        // Guarded decrement: only release reservation if there is enough
+        // reservedQty to cover this requirement. This prevents reservedQty from
+        // going negative if this cancel races with another decrement on the same
+        // stock row (e.g. a duplicate request that slipped past the order guard).
+        await tx.locationStock.updateMany({
           where: {
-            locationId_productId: {
-              locationId: req.locationId,
-              productId: req.productId,
-            },
+            locationId: req.locationId,
+            productId: req.productId,
+            reservedQty: { gte: req.quantity },
           },
           data: { reservedQty: { decrement: req.quantity } },
         });
@@ -1407,7 +1572,13 @@ async function runCancelSalesOrderAction(orderId: string) {
       },
       tx
     );
+
+    return { status: "success" as const };
   });
+
+  if (transactionResult.status === "error") {
+    return transactionResult;
+  }
 
   revalidateSalesOrderPaths({ orderId, locationIds });
   return { status: "success" as const, message: `Order ${order.orderNumber} cancelled.` };

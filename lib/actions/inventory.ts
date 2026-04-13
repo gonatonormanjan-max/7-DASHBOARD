@@ -3,11 +3,12 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { LocationType, ProductStatus } from "@prisma/client";
+import { LocationType, Prisma, ProductStatus } from "@prisma/client";
 import { logAudit } from "@/lib/audit";
 import {
   applyInboundMovingAverage,
   getSaleCostSnapshot,
+  recordOutboundCostHistory,
   syncLocationCostSnapshot,
 } from "@/lib/costing";
 import { requirePermission } from "@/lib/dal/auth";
@@ -57,10 +58,25 @@ function normalizeInventoryPath(path: string) {
   return path.split("?")[0];
 }
 
+function hasUnsafePathSegments(path: string) {
+  const pathname = path.split("?")[0].split("#")[0];
+  const candidates = [pathname];
+
+  try {
+    candidates.push(decodeURIComponent(pathname));
+  } catch {
+    // Ignore malformed encoded paths and keep raw validation.
+  }
+
+  return candidates.some((candidate) =>
+    candidate.split("/").some((segment) => segment === "..")
+  );
+}
+
 function resolveInventoryReturnTo(formData: FormData, fallback: string) {
   const returnTo = String(formData.get("returnTo") ?? "").trim();
 
-  if (returnTo.startsWith("/dashboard/inventory")) {
+  if (returnTo.startsWith("/dashboard/inventory") && !hasUnsafePathSegments(returnTo)) {
     return returnTo;
   }
 
@@ -103,6 +119,60 @@ function buildTransferNotes(details: {
   return details.notes ? `${prefix}\nNotes: ${details.notes}` : prefix;
 }
 
+class InitialStockAlreadyExistsError extends Error {
+  quantity: number;
+
+  constructor(quantity: number) {
+    super("Initial stock already exists for this location and product.");
+    this.quantity = quantity;
+  }
+}
+
+type LockedLocationStock = {
+  id: string;
+  quantity: number;
+  reservedQty: number;
+};
+
+async function lockLocationStock(
+  tx: Prisma.TransactionClient,
+  locationId: string,
+  productId: string
+): Promise<LockedLocationStock | null> {
+  const rows = await tx.$queryRaw<LockedLocationStock[]>(Prisma.sql`
+    SELECT "id", "quantity", "reservedQty"
+    FROM "LocationStock"
+    WHERE "locationId" = ${locationId}
+      AND "productId" = ${productId}
+    FOR UPDATE
+  `);
+
+  return rows[0] ?? null;
+}
+
+async function withInventoryTransactionRetry<T>(
+  work: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(work, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      const isSerializationRetry =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+      const isUniqueConflict =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+
+      if ((!isSerializationRetry && !isUniqueConflict) || attempt === 2) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Could not complete the inventory write after multiple retries.");
+}
+
 export async function adjustInventoryAction(
   _prevState: InventoryAdjustmentState,
   formData: FormData
@@ -122,7 +192,7 @@ export async function adjustInventoryAction(
     };
   }
 
-  const [product, location, currentStock] = await Promise.all([
+  const [product, location] = await Promise.all([
     prisma.product.findFirst({
       where: {
         id: parsed.data.productId,
@@ -144,19 +214,6 @@ export async function adjustInventoryAction(
       select: {
         id: true,
         name: true,
-      },
-    }),
-    prisma.locationStock.findUnique({
-      where: {
-        locationId_productId: {
-          locationId: parsed.data.locationId,
-          productId: parsed.data.productId,
-        },
-      },
-      select: {
-        id: true,
-        quantity: true,
-        reservedQty: true,
       },
     }),
   ]);
@@ -185,35 +242,37 @@ export async function adjustInventoryAction(
     };
   }
 
-  const availableQty = currentStock
-    ? getAvailableQuantity(currentStock.quantity, currentStock.reservedQty)
-    : 0;
-
-  if (parsed.data.direction === "decrease" && availableQty < parsed.data.quantity) {
-    return {
-      status: "error",
-      message:
-        availableQty > 0
-          ? `Only ${availableQty} units are currently available to reduce in ${location.name}.`
-          : `No available stock can be reduced from ${location.name}.`,
-      values,
-    };
-  }
-
   const quantityChange =
     parsed.data.direction === "increase" ? parsed.data.quantity : -parsed.data.quantity;
-  const currentQuantity = currentStock?.quantity ?? 0;
-  const nextQuantity = currentQuantity + quantityChange;
+  const adjustmentResult = await withInventoryTransactionRetry(async (tx) => {
+    const currentStock = await lockLocationStock(tx, location.id, product.id);
+    const currentQuantity = currentStock?.quantity ?? 0;
+    const currentReservedQty = currentStock?.reservedQty ?? 0;
+    const availableQty = currentStock
+      ? getAvailableQuantity(currentQuantity, currentReservedQty)
+      : 0;
 
-  if (nextQuantity < 0) {
-    return {
-      status: "error",
-      message: `Adjustment would result in negative stock (${currentQuantity} + ${quantityChange} = ${nextQuantity}). Verify the count.`,
-      values,
-    };
-  }
+    if (parsed.data.direction === "decrease" && availableQty < parsed.data.quantity) {
+      return {
+        status: "error" as const,
+        message:
+          availableQty > 0
+            ? `Only ${availableQty} units are currently available to reduce in ${location.name}.`
+            : `No available stock can be reduced from ${location.name}.`,
+        values,
+      };
+    }
 
-  await prisma.$transaction(async (tx) => {
+    const nextQuantity = currentQuantity + quantityChange;
+
+    if (nextQuantity < 0) {
+      return {
+        status: "error" as const,
+        message: `Adjustment would result in negative stock (${currentQuantity} + ${quantityChange} = ${nextQuantity}). Verify the count.`,
+        values,
+      };
+    }
+
     if (currentStock) {
       await tx.locationStock.update({
         where: { id: currentStock.id },
@@ -275,7 +334,13 @@ export async function adjustInventoryAction(
       },
       tx
     );
+
+    return null;
   });
+
+  if (adjustmentResult) {
+    return adjustmentResult;
+  }
 
   revalidateInventoryPaths([
     returnTo,
@@ -302,6 +367,18 @@ export async function supplierReceiptAction(
       status: "error",
       message: "Please fix the supplier receipt details.",
       fieldErrors: buildInventoryFieldErrors(parsed.error),
+      values,
+    };
+  }
+
+  if (parsed.data.items.some((item) => item.quantity < 1)) {
+    return {
+      ...initialSupplierReceiptState,
+      status: "error",
+      message: "Each receipt line must receive at least 1 unit.",
+      fieldErrors: {
+        items: ["Each receipt line must receive at least 1 unit."],
+      },
       values,
     };
   }
@@ -551,7 +628,7 @@ export async function transferInventoryAction(
     };
   }
 
-  const [product, sourceLocation, destinationLocation, sourceStock] = await Promise.all([
+  const [product, sourceLocation, destinationLocation] = await Promise.all([
     prisma.product.findFirst({
       where: { id: parsed.data.productId, status: { in: [ProductStatus.ACTIVE, ProductStatus.INACTIVE] } },
       select: { id: true, name: true, sku: true },
@@ -564,30 +641,10 @@ export async function transferInventoryAction(
       where: { id: parsed.data.toLocationId, isActive: true },
       select: { id: true, name: true },
     }),
-    prisma.locationStock.findUnique({
-      where: { locationId_productId: { locationId: parsed.data.fromLocationId, productId: parsed.data.productId } },
-      select: { id: true, quantity: true, reservedQty: true },
-    }),
   ]);
 
   if (!product || !sourceLocation || !destinationLocation) {
     return { status: "error", message: "The selected product or location is no longer available.", values };
-  }
-
-  if (!sourceStock) {
-    return { status: "error", message: `No stock record found for this product at ${sourceLocation.name}.`, values };
-  }
-
-  const availableQty = getAvailableQuantity(sourceStock.quantity, sourceStock.reservedQty);
-
-  if (availableQty < parsed.data.quantity) {
-    return {
-      status: "error",
-      message: availableQty > 0
-        ? `Only ${availableQty} units are available to transfer from ${sourceLocation.name}.`
-        : `No available stock can be transferred from ${sourceLocation.name}.`,
-      values,
-    };
   }
 
   const transferGroupId = randomUUID();
@@ -597,28 +654,57 @@ export async function transferInventoryAction(
     notes: parsed.data.notes,
   });
 
-  await prisma.$transaction(async (tx) => {
-    const [sourceCostSnapshot, destinationStockBefore] = await Promise.all([
-      getSaleCostSnapshot(tx, {
-        locationId: sourceLocation.id,
-        productId: product.id,
-      }),
-      tx.locationStock.findUnique({
-        where: {
-          locationId_productId: {
-            locationId: destinationLocation.id,
-            productId: product.id,
-          },
-        },
-        select: {
-          quantity: true,
-        },
-      }),
-    ]);
+  const transferResult = await withInventoryTransactionRetry(async (tx) => {
+    const lockTargets = [
+      { kind: "source" as const, locationId: sourceLocation.id },
+      { kind: "destination" as const, locationId: destinationLocation.id },
+    ].sort((left, right) => left.locationId.localeCompare(right.locationId));
+
+    const lockedStocks = new Map<"source" | "destination", LockedLocationStock | null>();
+
+    for (const target of lockTargets) {
+      lockedStocks.set(
+        target.kind,
+        await lockLocationStock(tx, target.locationId, product.id)
+      );
+    }
+
+    const sourceStock = lockedStocks.get("source") ?? null;
+    const destinationStockBefore = lockedStocks.get("destination") ?? null;
+
+    if (!sourceStock) {
+      return {
+        status: "error" as const,
+        message: `No stock record found for this product at ${sourceLocation.name}.`,
+        values,
+      };
+    }
+
+    const availableQty = getAvailableQuantity(sourceStock.quantity, sourceStock.reservedQty);
+
+    if (availableQty < parsed.data.quantity) {
+      return {
+        status: "error" as const,
+        message:
+          availableQty > 0
+            ? `Only ${availableQty} units are available to transfer from ${sourceLocation.name}.`
+            : `No available stock can be transferred from ${sourceLocation.name}.`,
+        values,
+      };
+    }
+
+    const sourceCostSnapshot = await getSaleCostSnapshot(tx, {
+      locationId: sourceLocation.id,
+      productId: product.id,
+    });
+
+    const nextSourceQuantity = sourceStock.quantity - parsed.data.quantity;
 
     await tx.locationStock.update({
-      where: { locationId_productId: { locationId: sourceLocation.id, productId: product.id } },
-      data: { quantity: { decrement: parsed.data.quantity } },
+      where: {
+        id: sourceStock.id,
+      },
+      data: { quantity: nextSourceQuantity },
     });
 
     await tx.locationStock.upsert({
@@ -657,7 +743,19 @@ export async function transferInventoryAction(
     await syncLocationCostSnapshot(tx, {
       locationId: sourceLocation.id,
       productId: product.id,
-      onHandQtySnapshot: sourceStock.quantity - parsed.data.quantity,
+      onHandQtySnapshot: nextSourceQuantity,
+    });
+
+    await recordOutboundCostHistory({
+      tx,
+      locationId: sourceLocation.id,
+      productId: product.id,
+      outboundQty: parsed.data.quantity,
+      outboundUnitCost: sourceCostSnapshot.unitCost,
+      performedById: user.id,
+      sourceType: "inventory.transfer",
+      sourceId: transferGroupId,
+      reason: "Transfer out",
     });
 
     await applyInboundMovingAverage({
@@ -695,7 +793,13 @@ export async function transferInventoryAction(
       },
       tx
     );
+
+    return null;
   });
+
+  if (transferResult) {
+    return transferResult;
+  }
 
   revalidateInventoryPaths([returnTo, `/dashboard/inventory/${sourceLocation.id}`, `/dashboard/inventory/${destinationLocation.id}`]);
   redirect(withFlashMessage(returnTo, { success: "Transfer recorded." }));
@@ -719,7 +823,7 @@ export async function initialStockAction(
     };
   }
 
-  const [product, location, currentStock] = await Promise.all([
+  const [product, location] = await Promise.all([
     prisma.product.findFirst({
       where: { id: parsed.data.productId, status: { not: "ARCHIVED" } },
       select: { id: true, name: true, sku: true, costPrice: true },
@@ -727,10 +831,6 @@ export async function initialStockAction(
     prisma.stockLocation.findFirst({
       where: { id: parsed.data.locationId, isActive: true },
       select: { id: true, name: true },
-    }),
-    prisma.locationStock.findUnique({
-      where: { locationId_productId: { locationId: parsed.data.locationId, productId: parsed.data.productId } },
-      select: { id: true, quantity: true },
     }),
   ]);
 
@@ -742,66 +842,117 @@ export async function initialStockAction(
     return { status: "error", message: "Select a valid active location.", values };
   }
 
-  if (currentStock && currentStock.quantity > 0) {
+  let committed = false;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          const currentStock = await tx.locationStock.findUnique({
+            where: {
+              locationId_productId: {
+                locationId: location.id,
+                productId: product.id,
+              },
+            },
+            select: { quantity: true },
+          });
+
+          if (currentStock && currentStock.quantity > 0) {
+            throw new InitialStockAlreadyExistsError(currentStock.quantity);
+          }
+
+          await tx.locationStock.upsert({
+            where: {
+              locationId_productId: { locationId: location.id, productId: product.id },
+            },
+            create: {
+              locationId: location.id,
+              productId: product.id,
+              quantity: parsed.data.quantity,
+            },
+            update: { quantity: parsed.data.quantity },
+          });
+
+          await tx.inventoryMovement.create({
+            data: {
+              type: "INITIAL_STOCK",
+              productId: product.id,
+              locationId: location.id,
+              quantityChange: parsed.data.quantity,
+              referenceType: "inventory.initial_stock",
+              notes: parsed.data.notes ?? null,
+              performedById: user.id,
+            },
+          });
+
+          await applyInboundMovingAverage({
+            tx,
+            locationId: location.id,
+            productId: product.id,
+            onHandBefore: currentStock?.quantity ?? 0,
+            inboundQty: parsed.data.quantity,
+            inboundUnitCost: product.costPrice,
+            performedById: user.id,
+            sourceType: "inventory.initial_stock",
+            sourceId: null,
+            reason: "Initial stock load",
+          });
+
+          await logAudit(
+            {
+              userId: user.id,
+              action: "inventory.initial_stock",
+              entity: "location_stock",
+              entityId: `${location.id}:${product.id}`,
+              details: {
+                productId: product.id,
+                productName: product.name,
+                sku: product.sku,
+                locationId: location.id,
+                locationName: location.name,
+                quantity: parsed.data.quantity,
+                notes: parsed.data.notes,
+              },
+            },
+            tx
+          );
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        }
+      );
+
+      committed = true;
+      break;
+    } catch (error) {
+      if (error instanceof InitialStockAlreadyExistsError) {
+        return {
+          status: "error",
+          message: `Stock already exists for this product at ${location.name} (${error.quantity} units). Use Manual Adjustment to correct existing stock.`,
+          fieldErrors: { productId: ["Stock already exists at this location."] },
+          values,
+        };
+      }
+
+      const isRetryableConflict =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+
+      if (isRetryableConflict && attempt < 2) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (!committed) {
     return {
       status: "error",
-      message: `Stock already exists for this product at ${location.name} (${currentStock.quantity} units). Use Manual Adjustment to correct existing stock.`,
-      fieldErrors: { productId: ["Stock already exists at this location."] },
+      message: "We could not load the initial stock due to a temporary conflict. Please try again.",
       values,
     };
   }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.locationStock.upsert({
-      where: { locationId_productId: { locationId: location.id, productId: product.id } },
-      create: { locationId: location.id, productId: product.id, quantity: parsed.data.quantity },
-      update: { quantity: parsed.data.quantity },
-    });
-
-    await tx.inventoryMovement.create({
-      data: {
-        type: "INITIAL_STOCK",
-        productId: product.id,
-        locationId: location.id,
-        quantityChange: parsed.data.quantity,
-        referenceType: "inventory.initial_stock",
-        notes: parsed.data.notes ?? null,
-        performedById: user.id,
-      },
-    });
-
-    await applyInboundMovingAverage({
-      tx,
-      locationId: location.id,
-      productId: product.id,
-      onHandBefore: currentStock?.quantity ?? 0,
-      inboundQty: parsed.data.quantity,
-      inboundUnitCost: product.costPrice,
-      performedById: user.id,
-      sourceType: "inventory.initial_stock",
-      sourceId: null,
-      reason: "Initial stock load",
-    });
-
-    await logAudit(
-      {
-        userId: user.id,
-        action: "inventory.initial_stock",
-        entity: "location_stock",
-        entityId: `${location.id}:${product.id}`,
-        details: {
-          productId: product.id,
-          productName: product.name,
-          sku: product.sku,
-          locationId: location.id,
-          locationName: location.name,
-          quantity: parsed.data.quantity,
-          notes: parsed.data.notes,
-        },
-      },
-      tx
-    );
-  });
 
   revalidateInventoryPaths([`/dashboard/inventory/${location.id}`]);
   redirect(
@@ -816,13 +967,6 @@ export async function bulkStockSetupAction(
   formData: FormData
 ): Promise<BulkStockSetupState> {
   const user = await requirePermission("inventory", "update");
-
-  if (user.role === "SALES_STAFF") {
-    return {
-      status: "error",
-      message: "You do not have permission to perform bulk stock setup.",
-    };
-  }
 
   const values = extractBulkStockSetupValues(formData);
 
