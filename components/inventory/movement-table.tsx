@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { MovementType } from "@prisma/client";
 import { formatSignedQuantity, getMovementTypeLabel } from "@/lib/inventory";
+import { formatDatePH, formatTimePH } from "@/lib/timezone";
 
 type MovementRow = {
   id: string;
@@ -60,16 +61,9 @@ export function InventoryMovementTable({ movements }: InventoryMovementTableProp
             {movements.map((movement) => (
               <tr key={movement.id} className="align-top">
                 <td className="px-5 py-4 text-sm text-slate-500">
-                  {movement.createdAt.toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  {formatDatePH(movement.createdAt)}
                   <p className="mt-1 text-xs text-slate-400">
-                    {movement.createdAt.toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                    {formatTimePH(movement.createdAt)}
                   </p>
                 </td>
                 <td className="px-5 py-4">

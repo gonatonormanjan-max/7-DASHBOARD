@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { BrandDeleteButton } from "@/components/brands/brand-delete-button";
+import { formatDatePH } from "@/lib/timezone";
 
 type BrandRow = {
   id: string;
@@ -74,11 +75,7 @@ export function BrandsTable({
                 </td>
                 <td className="px-5 py-4 text-sm text-slate-600">{brand._count.products}</td>
                 <td className="px-5 py-4 text-sm text-slate-500">
-                  {brand.createdAt.toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  {formatDatePH(brand.createdAt)}
                 </td>
                 <td className="px-5 py-4">
                   <div className="flex justify-end gap-2">

@@ -243,9 +243,6 @@ export default async function ReceiveInventoryPage({
                     : ""}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <Link href={`/dashboard/inventory/receive?purchaseOrderId=${order.id}`}>
-                    <Button>Receive stock</Button>
-                  </Link>
                   <Link href={`/dashboard/purchase-orders/${order.id}`}>
                     <Button type="button" variant="outline">
                       View PO

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { deleteCategoryAction } from "@/lib/actions/categories";
+import { formatDatePH } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 
@@ -71,11 +72,7 @@ export function CategoriesTable({
                     {category._count.products}
                   </td>
                   <td className="px-5 py-4 text-sm text-slate-500">
-                    {category.updatedAt.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {formatDatePH(category.updatedAt)}
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex justify-end gap-2">

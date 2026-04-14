@@ -6,6 +6,7 @@ import {
   restoreProductAction,
 } from "@/lib/actions/products";
 import { formatCurrency } from "@/lib/products";
+import { formatDatePH } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { ProductStatusBadge } from "@/components/products/product-status-badge";
@@ -188,11 +189,7 @@ export function ProductsTable({
                     {totalStock.toLocaleString("en-US")}
                   </td>
                   <td className="px-5 py-4 text-sm text-slate-500">
-                    {product.updatedAt.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {formatDatePH(product.updatedAt)}
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex justify-end gap-2">

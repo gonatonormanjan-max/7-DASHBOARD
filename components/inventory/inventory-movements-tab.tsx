@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatSignedQuantity, getMovementTypeLabel } from "@/lib/inventory";
 import type { InventoryMovementRow } from "@/lib/dal/inventory";
+import { formatDatePH, formatTimePH } from "@/lib/timezone";
 
 type InventoryMovementsTabProps = {
   movements: InventoryMovementRow[];
@@ -62,16 +63,9 @@ export function InventoryMovementsTab({
             {movements.map((movement) => (
               <tr key={movement.id} className="align-top">
                 <td className="px-5 py-4 text-sm text-slate-500">
-                  {movement.createdAt.toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  {formatDatePH(movement.createdAt)}
                   <p className="mt-1 text-xs text-slate-400">
-                    {movement.createdAt.toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                    {formatTimePH(movement.createdAt)}
                   </p>
                 </td>
                 <td className="px-5 py-4">

@@ -1,5 +1,6 @@
 import type { AuditLogRow } from "@/lib/dal/audit-logs";
 import { getRoleLabel } from "@/lib/permissions";
+import { formatDatePH, formatShortDatePH, formatTimePH } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -298,22 +299,11 @@ function formatRelativeTime(date: Date): string {
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
 
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatShortDatePH(date);
 }
 
 function formatAbsoluteTime(date: Date): string {
-  return (
-    date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }) +
-    " at " +
-    date.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    })
-  );
+  return formatDatePH(date) + " at " + formatTimePH(date);
 }
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { formatSignedQuantity, getMovementTypeLabel } from "@/lib/inventory";
 import type { DashboardRecentMovement } from "@/lib/dal/dashboard";
 import { cn } from "@/lib/utils";
+import { formatShortDatePH, formatTimePH } from "@/lib/timezone";
 
 type RecentActivityProps = {
   movements: DashboardRecentMovement[];
@@ -49,10 +50,7 @@ function formatRelativeTime(date: Date) {
     return `${diffInDays}d ago`;
   }
 
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  return formatShortDatePH(date);
 }
 
 export function RecentActivity({ movements }: RecentActivityProps) {
@@ -86,15 +84,9 @@ export function RecentActivity({ movements }: RecentActivityProps) {
                       {formatRelativeTime(movement.createdAt)}
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
-                      {movement.createdAt.toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}{" "}
+                      {formatShortDatePH(movement.createdAt)}{" "}
                       at{" "}
-                      {movement.createdAt.toLocaleTimeString("en-US", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
+                      {formatTimePH(movement.createdAt)}
                     </p>
                   </td>
                   <td className="px-6 py-4">

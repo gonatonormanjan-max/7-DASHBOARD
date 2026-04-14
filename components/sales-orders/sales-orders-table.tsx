@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { SalesOrderStatus } from "@prisma/client";
 import { formatCurrency } from "@/lib/products";
 import { canArchiveSalesOrder, formatSalesOrderStatus } from "@/lib/sales-orders";
+import { formatDateTimePH } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ArchiveOrderButton, UnarchiveOrderButton } from "@/components/sales-orders/archive-actions";
@@ -93,10 +94,7 @@ export function SalesOrdersTable({
                   <StatusBadge status={formatSalesOrderStatus(order.status)} />
                 </td>
                 <td className="px-5 py-4 text-sm text-slate-500">
-                  {order.createdAt.toLocaleString("en-US", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
+                  {formatDateTimePH(order.createdAt)}
                 </td>
                 <td className="px-5 py-4 text-sm text-slate-600">
                   {order.createdBy.firstName} {order.createdBy.lastName}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Role } from "@prisma/client";
 import { getRoleLabel } from "@/lib/permissions";
 import { getUserStatusLabel } from "@/lib/users";
+import { formatDatePH } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 
 type UserRow = {
@@ -61,11 +62,7 @@ export function UsersTable({ users, canManage }: UsersTableProps) {
                   {getUserStatusLabel(user.isActive)}
                 </td>
                 <td className="px-5 py-4 text-sm text-slate-500">
-                  {user.createdAt.toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  {formatDatePH(user.createdAt)}
                 </td>
                 <td className="px-5 py-4">
                   <div className="flex justify-end gap-2">
