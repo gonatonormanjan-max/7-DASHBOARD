@@ -18,9 +18,12 @@ export async function proxy(request: NextRequest) {
   // /dashboard → server-side requireUser() rejects invalid token → redirect back
   // to /auth/login → repeat. Using getToken() here makes "authenticated" mean
   // "has a valid, verifiable JWT" — the same thing requireUser() checks server-side.
+  // Auth.js uses __Secure-authjs.session-token on HTTPS origins.
+  const secureCookie = request.nextUrl.protocol === "https:";
   const authToken = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+    secureCookie,
   });
   const isAuthenticated = Boolean(authToken);
 
