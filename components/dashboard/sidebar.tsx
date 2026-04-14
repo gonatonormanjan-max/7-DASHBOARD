@@ -27,6 +27,7 @@ import type { NavIcon } from "@/lib/permissions";
 import { getRoleDescription, getRoleLabel, hasPermission, type NavItem } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ThemeSettingsMenu } from "@/components/theme/theme-settings-menu";
 
 const SIDEBAR_COLLAPSE_STORAGE_KEY = "dashboard:sidebar-collapsed";
 const SIDEBAR_COLLAPSE_EVENT = "dashboard:sidebar-collapse-change";
@@ -108,7 +109,7 @@ export function DashboardSidebar({ navItems, user }: DashboardSidebarProps) {
                 isCollapsed && "text-center"
               )}
             >
-              {isCollapsed ? "NI" : "Northstar Inventory"}
+              {isCollapsed ? "7D" : "7-Dashboard"}
             </p>
             <h1
               className={cn(
@@ -215,6 +216,7 @@ export function DashboardSidebar({ navItems, user }: DashboardSidebarProps) {
             Switch working branch
           </Link>
         ) : null}
+        <ThemeSettingsMenu collapsed={isCollapsed} />
         <form action={signOutAction} className="mt-3">
           <Button
             className={cn("w-full", isCollapsed && "px-0")}

@@ -45,7 +45,7 @@ export function BrandForm({ action, mode, brand }: BrandFormProps) {
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "name", brand?.name)}
             name="name"
-            placeholder="Northstar"
+            placeholder="Acme"
             required
             type="text"
           />
