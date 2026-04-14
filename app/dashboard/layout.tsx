@@ -4,6 +4,8 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { MobileBottomNav } from "@/components/dashboard/mobile-nav";
 import { PageTransition } from "@/components/ui/page-transition";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {

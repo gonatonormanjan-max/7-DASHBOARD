@@ -4,6 +4,8 @@ import { getSalesStaffActiveLocationId, requireUser } from "@/lib/dal/auth";
 import { prisma } from "@/lib/prisma";
 import AuthLayout from "@/components/auth-layout";
 
+export const dynamic = "force-dynamic";
+
 type SelectLocationPageProps = {
   searchParams: Promise<{
     next?: string | string[];
