@@ -15,35 +15,24 @@ import { prisma } from "@/lib/prisma";
 export const SALES_STAFF_ACTIVE_LOCATION_COOKIE = "salesStaffActiveLocationId";
 
 export const getCurrentUser = cache(async () => {
-  console.log("[DEBUG] getCurrentUser: calling auth()...");
   const session = await auth();
-  console.log("[DEBUG] getCurrentUser: session =", JSON.stringify(session, null, 2));
 
   if (!session?.user?.id) {
-    console.log("[DEBUG] getCurrentUser: no session or no user id, returning null");
     return null;
   }
 
-  console.log("[DEBUG] getCurrentUser: querying user by id:", session.user.id);
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
-    console.log("[DEBUG] getCurrentUser: user found =", user ? "yes" : "no");
-    return user;
-  } catch (error) {
-    console.error("[DEBUG] getCurrentUser: DB query failed:", error);
-    throw error;
-  }
+  return prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      isActive: true,
+      createdAt: true,
+    },
+  });
 });
 
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
@@ -90,30 +79,36 @@ export async function requireUser() {
 export async function getSalesStaffActiveLocationId(user?: CurrentUser) {
   const resolvedUser = user ?? (await requireUser());
 
-  if (resolvedUser.role !== "SALES_STAFF") {
-    return null;
-  }
-
-  const cookieStore = await cookies();
-  const locationId = cookieStore.get(SALES_STAFF_ACTIVE_LOCATION_COOKIE)?.value?.trim();
-
-  if (!locationId) {
-    return null;
-  }
-
-  const location = await prisma.stockLocation.findFirst({
-    where: {
-      id: locationId,
-      isActive: true,
-      type: LocationType.BRANCH,
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  return location?.id ?? null;
+  return getSalesStaffActiveLocationIdForUser(resolvedUser.id, resolvedUser.role);
 }
+
+const getSalesStaffActiveLocationIdForUser = cache(
+  async (_userId: string, role: Role) => {
+    if (role !== "SALES_STAFF") {
+      return null;
+    }
+
+    const cookieStore = await cookies();
+    const locationId = cookieStore.get(SALES_STAFF_ACTIVE_LOCATION_COOKIE)?.value?.trim();
+
+    if (!locationId) {
+      return null;
+    }
+
+    const location = await prisma.stockLocation.findFirst({
+      where: {
+        id: locationId,
+        isActive: true,
+        type: LocationType.BRANCH,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return location?.id ?? null;
+  }
+);
 
 export async function requireSalesStaffActiveLocationId(options?: {
   user?: CurrentUser;

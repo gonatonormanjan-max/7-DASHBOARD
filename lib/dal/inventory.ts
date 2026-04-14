@@ -362,61 +362,64 @@ export async function getInventoryLandingData(options?: {
     }),
   ]);
 
-  const locationCards: InventoryLocationCard[] = locations.map((location) => {
-    const locationStockRows = stockRows.filter(
-      (row) => row.locationId === location.id
-    );
+  type LocationAggregate = {
+    skuCount: number;
+    totalOnHand: number;
+    lowStockCount: number;
+  };
 
-    const skuCount = locationStockRows.filter(
-      (row) => row.quantity > 0
-    ).length;
-
-    const totalOnHand = locationStockRows.reduce(
-      (sum, row) => sum + row.quantity,
-      0
-    );
-
-    const lowStockCount = locationStockRows.filter((row) => {
-      const availableQty = getAvailableQuantity(row.quantity, row.reservedQty);
-      const threshold = resolveReorderLevel(row.reorderLevel, row.product.reorderLevel);
-      return threshold > 0 && availableQty <= threshold;
-    }).length;
-
-    return {
-      id: location.id,
-      name: location.name,
-      code: location.code,
-      type: location.type,
-      skuCount,
-      totalOnHand,
-      lowStockCount,
-    };
-  });
-
+  const locationAggregates = new Map<string, LocationAggregate>();
   const seenProductIds = new Set<string>();
   let totalSkus = 0;
+  let totalOnHand = 0;
   let totalLowStock = 0;
   let totalOutOfStock = 0;
 
   for (const row of stockRows) {
+    const locationAggregate = locationAggregates.get(row.locationId) ?? {
+      skuCount: 0,
+      totalOnHand: 0,
+      lowStockCount: 0,
+    };
+
+    if (row.quantity > 0) {
+      locationAggregate.skuCount++;
+    }
+
+    locationAggregate.totalOnHand += row.quantity;
+    totalOnHand += row.quantity;
+
+    const availableQty = getAvailableQuantity(row.quantity, row.reservedQty);
+    const threshold = resolveReorderLevel(row.reorderLevel, row.product.reorderLevel);
+    if (threshold > 0 && availableQty <= threshold) {
+      locationAggregate.lowStockCount++;
+      totalLowStock++;
+    }
+    if (availableQty <= 0) {
+      totalOutOfStock++;
+    }
+
+    locationAggregates.set(row.locationId, locationAggregate);
+
     if (!seenProductIds.has(row.product.id)) {
       seenProductIds.add(row.product.id);
       totalSkus++;
     }
   }
 
-  for (const row of stockRows) {
-    const availableQty = getAvailableQuantity(row.quantity, row.reservedQty);
-    const threshold = resolveReorderLevel(row.reorderLevel, row.product.reorderLevel);
-    if (threshold > 0 && availableQty <= threshold) {
-      totalLowStock++;
-    }
-    if (availableQty <= 0) {
-      totalOutOfStock++;
-    }
-  }
+  const locationCards: InventoryLocationCard[] = locations.map((location) => {
+    const aggregate = locationAggregates.get(location.id);
 
-  const totalOnHand = stockRows.reduce((sum, row) => sum + row.quantity, 0);
+    return {
+      id: location.id,
+      name: location.name,
+      code: location.code,
+      type: location.type,
+      skuCount: aggregate?.skuCount ?? 0,
+      totalOnHand: aggregate?.totalOnHand ?? 0,
+      lowStockCount: aggregate?.lowStockCount ?? 0,
+    };
+  });
 
   const globalSummary: InventoryLandingSummary = {
     totalSkus,
