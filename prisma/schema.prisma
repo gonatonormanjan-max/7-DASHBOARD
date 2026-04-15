@@ -197,9 +197,23 @@ model StockLocation {
   stock         LocationStock[]
   productCosts  LocationProductCost[]
   costHistory   ProductCostHistory[]
+  quotaSetting  BranchQuotaSetting?
   salesOrders   SalesOrder[]         @relation("SalesOrderLocation")
   salesItems    SalesOrderItem[]
   movements     InventoryMovement[]
+}
+
+model BranchQuotaSetting {
+  id                String       @id @default(uuid())
+  branchId          String       @unique
+  rollingWindowDays Int          @default(30)
+  revenueTarget     Decimal?     @db.Decimal(12, 2)
+  unitsTarget       Int?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  branch            StockLocation @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
 }
 
 model LocationStock {

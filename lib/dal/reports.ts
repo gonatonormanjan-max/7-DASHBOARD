@@ -9,6 +9,11 @@ import {
   MOVING_AVERAGE_VALUATION_METHOD,
 } from "@/lib/costing";
 import { prisma } from "@/lib/prisma";
+import {
+  computeBranchQuotaRows,
+  type BranchQuotaComputedRow,
+  type QuotaAttainmentBand,
+} from "@/lib/reports/branch-quotas";
 
 export const REPORT_OVERVIEW_WINDOW_DAYS = 30;
 export const DEFAULT_ANALYTICS_WINDOW_DAYS = 90;
@@ -173,6 +178,25 @@ export type ReportsQuotaData = {
   rows: QuotaTrackerRow[];
 };
 
+export type BranchQuotaProgressRow = BranchQuotaComputedRow;
+
+export type BranchQuotaPageData = {
+  metric: QuotaMetric;
+  storageReady: boolean;
+  rows: BranchQuotaProgressRow[];
+  summary: {
+    branchCount: number;
+    configuredCount: number;
+    reachedCount: number;
+    averageAttainment: number | null;
+    bands: Record<QuotaAttainmentBand, number>;
+    bestPerformer: {
+      name: string;
+      value: number;
+    } | null;
+  };
+};
+
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -232,6 +256,42 @@ function getSalesStatusWhere() {
 function normalizeScopeLocationId(locationId?: string | null) {
   const normalized = locationId?.trim();
   return normalized ? normalized : null;
+}
+
+function isMissingBranchQuotaSettingsTableError(error: unknown) {
+  const errorLike = error as
+    | {
+        code?: unknown;
+        message?: unknown;
+        meta?: unknown;
+      }
+    | undefined;
+  const code = typeof errorLike?.code === "string" ? errorLike.code : "";
+  const message = typeof errorLike?.message === "string" ? errorLike.message : "";
+  const metaCode =
+    typeof errorLike?.meta === "object" &&
+    errorLike.meta !== null &&
+    "code" in errorLike.meta &&
+    typeof errorLike.meta.code === "string"
+      ? errorLike.meta.code
+      : "";
+
+  if (code === "P2021" || code === "42P01") {
+    return true;
+  }
+
+  if (code === "P2010" && metaCode === "42P01") {
+    return true;
+  }
+
+  if (metaCode === "42P01") {
+    return true;
+  }
+
+  return (
+    message.includes('relation "BranchQuotaSetting" does not exist') ||
+    message.includes('relation "branchquotasetting" does not exist')
+  );
 }
 
 function getReportConfidence(input: {
@@ -1195,5 +1255,197 @@ export async function getReportsQuotaData({
         }
       : null,
     rows,
+  };
+}
+
+export async function getDedicatedBranchQuotaData({
+  metric = "revenue",
+}: {
+  metric?: QuotaMetric;
+} = {}): Promise<BranchQuotaPageData> {
+  const branches = await prisma.stockLocation.findMany({
+    where: {
+      type: "BRANCH",
+      isActive: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+
+  if (branches.length === 0) {
+    return {
+      metric,
+      storageReady: true,
+      rows: [],
+      summary: {
+        branchCount: 0,
+        configuredCount: 0,
+        reachedCount: 0,
+        averageAttainment: null,
+        bands: {
+          unconfigured: 0,
+          red: 0,
+          amber: 0,
+          green: 0,
+        },
+        bestPerformer: null,
+      },
+    };
+  }
+
+  const branchIds = branches.map((branch) => branch.id);
+  let hasBranchQuotaSettingsTable = false;
+  let storageReady = true;
+  try {
+    const tableCheckRows = await prisma.$queryRaw<Array<{ tableExists: boolean }>>(
+      Prisma.sql`
+        SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.tables
+          WHERE table_schema = current_schema()
+            AND LOWER(table_name) = 'branchquotasetting'
+        ) AS "tableExists"
+      `
+    );
+    hasBranchQuotaSettingsTable = Boolean(tableCheckRows[0]?.tableExists);
+    if (!hasBranchQuotaSettingsTable) {
+      storageReady = false;
+    }
+  } catch (error) {
+    if (!isMissingBranchQuotaSettingsTableError(error)) {
+      throw error;
+    }
+    storageReady = false;
+  }
+
+  let settingsRows: Array<{
+    branchId: string;
+    rollingWindowDays: number;
+    revenueTarget: Prisma.Decimal | number | string | null;
+    unitsTarget: number | null;
+  }> = [];
+
+  if (branchIds.length > 0 && hasBranchQuotaSettingsTable) {
+    try {
+      settingsRows = await prisma.$queryRaw<
+        Array<{
+          branchId: string;
+          rollingWindowDays: number;
+          revenueTarget: Prisma.Decimal | number | string | null;
+          unitsTarget: number | null;
+        }>
+      >(
+        Prisma.sql`
+          SELECT "branchId", "rollingWindowDays", "revenueTarget", "unitsTarget"
+          FROM "BranchQuotaSetting"
+          WHERE "branchId" IN (${Prisma.join(branchIds)})
+        `
+      );
+    } catch (error) {
+      if (!isMissingBranchQuotaSettingsTableError(error)) {
+        throw error;
+      }
+      storageReady = false;
+    }
+  }
+
+  const settingsByBranchId = new Map(settingsRows.map((setting) => [setting.branchId, setting]));
+
+  const normalizedBranches = branches.map((branch) => {
+    const setting = settingsByBranchId.get(branch.id);
+
+    return {
+      id: branch.id,
+      name: branch.name,
+      code: branch.code,
+      rollingWindowDays: setting?.rollingWindowDays ?? DEFAULT_QUOTA_WINDOW_DAYS,
+      revenueTarget:
+        setting?.revenueTarget === null || setting?.revenueTarget === undefined
+          ? null
+          : Number(setting.revenueTarget),
+      unitsTarget: setting?.unitsTarget ?? null,
+    };
+  });
+
+  const maxRollingWindowDays = normalizedBranches.reduce(
+    (maxDays, branch) => Math.max(maxDays, branch.rollingWindowDays),
+    DEFAULT_QUOTA_WINDOW_DAYS
+  );
+  const since = getWindowStart(maxRollingWindowDays);
+  const items = await prisma.salesOrderItem.findMany({
+    where: {
+      locationId: {
+        in: branchIds,
+      },
+      salesOrder: {
+        status: getSalesStatusWhere(),
+        createdAt: { gte: since },
+      },
+    },
+    select: {
+      locationId: true,
+      quantity: true,
+      unitPrice: true,
+      salesOrder: {
+        select: {
+          createdAt: true,
+        },
+      },
+    },
+  });
+
+  const rows = computeBranchQuotaRows({
+    branches: normalizedBranches,
+    sales: items.map((item) => ({
+      branchId: item.locationId,
+      dateKey: toDateKey(item.salesOrder.createdAt),
+      revenue: item.quantity * item.unitPrice.toNumber(),
+      units: item.quantity,
+    })),
+    metric,
+  });
+
+  const configuredRows = rows.filter((row) => row.targetValue !== null);
+  const reachedRows = rows.filter((row) => row.reached);
+  const bands: Record<QuotaAttainmentBand, number> = {
+    unconfigured: 0,
+    red: 0,
+    amber: 0,
+    green: 0,
+  };
+
+  for (const row of rows) {
+    bands[row.band] += 1;
+  }
+
+  const averageAttainment =
+    configuredRows.length > 0
+      ? configuredRows.reduce((sum, row) => sum + (row.attainmentRatio ?? 0), 0) /
+        configuredRows.length
+      : null;
+
+  return {
+    metric,
+    storageReady,
+    rows,
+    summary: {
+      branchCount: rows.length,
+      configuredCount: configuredRows.length,
+      reachedCount: reachedRows.length,
+      averageAttainment,
+      bands,
+      bestPerformer: rows[0]
+        ? {
+            name: rows[0].name,
+            value: rows[0].currentValue,
+          }
+        : null,
+    },
   };
 }

@@ -95,7 +95,6 @@ export const permissionMatrix: Record<
     locations: ["read"],
     inventory: ["read"],
     sales_orders: ["create", "read", "update"],
-    reports: ["read"],
   },
 };
 

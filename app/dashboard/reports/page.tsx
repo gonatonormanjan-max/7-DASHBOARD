@@ -29,6 +29,9 @@ import { SeasonalTrendsChart } from "@/components/reports/seasonal-trends-chart"
 import { QuotaTracker } from "@/components/reports/quota-tracker";
 import { MetricContextStrip } from "@/components/reports/metric-context-strip";
 import { AnalyticsStatCardsCarousel } from "@/components/reports/analytics-stat-cards-carousel";
+import { SaveReportsPdfButton } from "@/components/reports/save-reports-pdf-button";
+import { isReportsPdfExportEnabled } from "@/lib/feature-flags";
+import { hasPermission } from "@/lib/permissions";
 
 type ReportsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -150,6 +153,13 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     returnTo: `/dashboard/reports?view=${view}`,
   });
   const tabs = getViewTabs(view);
+  const canManageBranchQuotas = hasPermission(user.role, "reports", "update");
+  const headerAction = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <TabToggle tabs={tabs} />
+      {isReportsPdfExportEnabled ? <SaveReportsPdfButton view={view} /> : null}
+    </div>
+  );
 
   if (view === "analytics") {
     const analyticsDays = parsePositiveInt(
@@ -219,7 +229,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           eyebrow="Decision Support"
           title="Reports"
           description={getHeaderDescription(view)}
-          action={<TabToggle tabs={tabs} />}
+          action={headerAction}
         />
 
         <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
@@ -325,8 +335,24 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           eyebrow="Decision Support"
           title="Reports"
           description={getHeaderDescription(view)}
-          action={<TabToggle tabs={tabs} />}
+          action={headerAction}
         />
+
+        {canManageBranchQuotas ? (
+          <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Need saved branch quotas?</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Move from temporary target checks to persistent per-branch quotas with branch-specific
+              rolling windows and 3-color attainment indicators.
+            </p>
+            <Link
+              className="mt-5 inline-flex items-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              href={`/dashboard/reports/branch-quotas?metric=${quotaMetric}`}
+            >
+              Open Branch Quotas
+            </Link>
+          </section>
+        ) : null}
 
         <QuotaTracker data={quotaData} />
       </div>
@@ -345,7 +371,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         eyebrow="Decision Support"
         title="Reports"
         description={getHeaderDescription(view)}
-        action={<TabToggle tabs={tabs} />}
+        action={headerAction}
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

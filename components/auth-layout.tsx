@@ -16,25 +16,21 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             </p>
           </div>
 
-          <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
-                <p className="tracking-label text-[10px] text-zinc-500">
-                  Warehouses
-                </p>
-                <p className="mt-2 text-2xl font-semibold">3 Active</p>
+          <div className="space-y-3">
+            {[
+              "Multi-branch inventory tracking",
+              "Role-based access by team level",
+              "Real-time stock movement control",
+            ].map((feature) => (
+              <div key={feature} className="flex items-center gap-3">
+                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                    <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                <span className="text-sm text-zinc-400">{feature}</span>
               </div>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
-                <p className="tracking-label text-[10px] text-zinc-500">
-                  Low Stock
-                </p>
-                <p className="mt-2 text-2xl font-semibold">12 Alerts</p>
-              </div>
-            </div>
-            <p className="text-sm leading-6 text-zinc-300">
-              Ledger-based stock movements, role-based dashboards, and reporting all live
-              under the same protected workspace.
-            </p>
+            ))}
           </div>
         </div>
 

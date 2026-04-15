@@ -56,6 +56,13 @@ export default function LoginPage() {
 
   return (
     <AuthLayout>
+      <div className="mb-6 flex justify-center">
+        <img
+          src="/dispoz-logo.png"
+          alt="Dispoz Vape Lounge"
+          className="h-[336px] w-[336px] object-contain"
+        />
+      </div>
       <h2 className="text-2xl font-semibold text-zinc-900">Welcome back</h2>
       <p className="mt-1 text-sm text-zinc-500">
         Sign in with the account issued by your administrator.
