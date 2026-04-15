@@ -4,6 +4,7 @@ import { hasPermission } from "@/lib/permissions";
 import { requirePermission } from "@/lib/dal/auth";
 import { getPurchaseOrderById, getPurchaseOrderMovements } from "@/lib/dal/purchase-orders";
 import { formatCurrency } from "@/lib/products";
+import { formatDateMNL, formatDateTimeMNL } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { DetailField } from "@/components/ui/detail-field";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/po-status-badge";
@@ -114,9 +115,7 @@ export default async function PurchaseOrderDetailPage({
               label="Expected date"
               value={
                 order.expectedDate
-                  ? order.expectedDate.toLocaleDateString("en-PH", {
-                      dateStyle: "medium",
-                    })
+                  ? formatDateMNL(order.expectedDate)
                   : "Not set"
               }
             />
@@ -222,17 +221,11 @@ export default async function PurchaseOrderDetailPage({
             <div className="mt-4 space-y-4">
               <DetailField
                 label="Created"
-                value={order.createdAt.toLocaleString("en-PH", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(order.createdAt)}
               />
               <DetailField
                 label="Last updated"
-                value={order.updatedAt.toLocaleString("en-PH", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(order.updatedAt)}
               />
             </div>
           </div>
@@ -254,10 +247,7 @@ export default async function PurchaseOrderDetailPage({
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500">Last received</span>
                   <span className="font-semibold text-slate-900">
-                    {movements[movements.length - 1].createdAt.toLocaleDateString(
-                      "en-PH",
-                      { dateStyle: "medium" }
-                    )}
+                    {formatDateMNL(movements[movements.length - 1].createdAt)}
                   </span>
                 </div>
               </dl>

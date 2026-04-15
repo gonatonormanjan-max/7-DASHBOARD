@@ -4,6 +4,7 @@ import { hasPermission } from "@/lib/permissions";
 import { requirePermission } from "@/lib/dal/auth";
 import { getSupplierById } from "@/lib/dal/suppliers";
 import { formatCurrency } from "@/lib/products";
+import { formatDateMNL, formatDateTimeMNL } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { DetailField } from "@/components/ui/detail-field";
 import { PageHeader } from "@/components/ui/page-header";
@@ -101,17 +102,11 @@ export default async function SupplierDetailPage({
             <div className="mt-4 space-y-4">
               <DetailField
                 label="Created"
-                value={supplier.createdAt.toLocaleString("en-PH", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(supplier.createdAt)}
               />
               <DetailField
                 label="Last updated"
-                value={supplier.updatedAt.toLocaleString("en-PH", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(supplier.updatedAt)}
               />
             </div>
           </div>
@@ -172,9 +167,7 @@ export default async function SupplierDetailPage({
                       {formatCurrency(order.totalAmount.toString())}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-500">
-                      {order.createdAt.toLocaleDateString("en-PH", {
-                        dateStyle: "medium",
-                      })}
+                      {formatDateMNL(order.createdAt)}
                     </td>
                   </tr>
                 ))}

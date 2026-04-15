@@ -6,6 +6,7 @@ import {
   getPurchaseOrderFormOptions,
   getPurchaseOrdersAwaitingReceipt,
 } from "@/lib/dal/purchase-orders";
+import { formatDateMNL } from "@/lib/timezone";
 import { requirePermission } from "@/lib/dal/auth";
 import { Button } from "@/components/ui/button";
 import { SupplierReceiptForm } from "@/components/inventory/supplier-receipt-form";
@@ -174,9 +175,7 @@ export default async function ReceiveInventoryPage({
                   Remaining units:{" "}
                   <span className="font-medium">{selectedOrderRemainingUnits}</span>
                   {selectedOrder.expectedDate
-                    ? ` · Expected ${selectedOrder.expectedDate.toLocaleDateString("en-PH", {
-                        dateStyle: "medium",
-                      })}`
+                    ? ` · Expected ${formatDateMNL(selectedOrder.expectedDate)}`
                     : ""}
                 </p>
               </div>
@@ -237,9 +236,7 @@ export default async function ReceiveInventoryPage({
                   across {order.remainingLines} open line
                   {order.remainingLines === 1 ? "" : "s"}.
                   {order.expectedDate
-                    ? ` Expected ${order.expectedDate.toLocaleDateString("en-PH", {
-                        dateStyle: "medium",
-                      })}.`
+                    ? ` Expected ${formatDateMNL(order.expectedDate)}.`
                     : ""}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
@@ -277,3 +274,4 @@ export default async function ReceiveInventoryPage({
     </div>
   );
 }
+

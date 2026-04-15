@@ -5,6 +5,7 @@ import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/
 import { getSalesOrderListData } from "@/lib/dal/sales-orders";
 import { parseSalesOrderListFilters } from "@/lib/validators/sales-orders";
 import { formatCurrency } from "@/lib/products";
+import { formatDateMNL } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
@@ -201,9 +202,7 @@ export default async function SalesOrdersPage({
                       {formatCurrency(order.totalAmount)}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-500">
-                      {order.createdAt.toLocaleDateString("en-PH", {
-                        dateStyle: "medium",
-                      })}
+                      {formatDateMNL(order.createdAt)}
                     </td>
                   </tr>
                 ))

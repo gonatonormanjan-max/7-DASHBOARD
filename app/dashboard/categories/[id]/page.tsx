@@ -4,6 +4,7 @@ import { deleteCategoryAction } from "@/lib/actions/categories";
 import { requirePermission } from "@/lib/dal/auth";
 import { getCategoryById } from "@/lib/dal/categories";
 import { hasPermission } from "@/lib/permissions";
+import { formatDateTimeMNL } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { DetailField } from "@/components/ui/detail-field";
@@ -104,17 +105,11 @@ export default async function CategoryDetailPage({ params }: CategoryDetailPageP
             <div className="mt-4 space-y-4">
               <DetailField
                 label="Created"
-                value={category.createdAt.toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(category.createdAt)}
               />
               <DetailField
                 label="Last updated"
-                value={category.updatedAt.toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(category.updatedAt)}
               />
             </div>
           </div>

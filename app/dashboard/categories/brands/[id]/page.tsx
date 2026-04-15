@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermission } from "@/lib/dal/auth";
 import { getBrandById } from "@/lib/dal/brands";
+import { formatDateTimeMNL } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProductStatusBadge } from "@/components/products/product-status-badge";
@@ -56,17 +57,11 @@ export default async function BrandDetailPage({ params }: BrandDetailPageProps) 
             <div className="mt-4 space-y-4">
               <DetailField
                 label="Created"
-                value={brand.createdAt.toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(brand.createdAt)}
               />
               <DetailField
                 label="Last updated"
-                value={brand.updatedAt.toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(brand.updatedAt)}
               />
             </div>
           </div>

@@ -5,6 +5,7 @@ import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/
 import { getSalesOrderById } from "@/lib/dal/sales-orders";
 import { formatCurrency } from "@/lib/products";
 import { formatPaymentMode, formatSalesOrderVoidReason } from "@/lib/sales-orders";
+import { formatDateTimeMNL } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { DetailField } from "@/components/ui/detail-field";
 import { PageHeader } from "@/components/ui/page-header";
@@ -212,25 +213,16 @@ export default async function SalesOrderDetailPage({
             <div className="mt-4 space-y-4">
               <DetailField
                 label="Created"
-                value={order.createdAt.toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(order.createdAt)}
               />
               <DetailField
                 label="Last updated"
-                value={order.updatedAt.toLocaleString("en-US", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                value={formatDateTimeMNL(order.updatedAt)}
               />
               {order.voidedAt ? (
                 <DetailField
                   label="Voided at"
-                  value={order.voidedAt.toLocaleString("en-US", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
+                  value={formatDateTimeMNL(order.voidedAt)}
                 />
               ) : null}
             </div>

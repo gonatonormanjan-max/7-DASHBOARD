@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/dal/auth";
 import { getProductById } from "@/lib/dal/products";
 import { formatCurrency } from "@/lib/products";
 import { hasPermission } from "@/lib/permissions";
+import { formatDateMNL } from "@/lib/timezone";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProductStatusBadge } from "@/components/products/product-status-badge";
 import { Button } from "@/components/ui/button";
@@ -159,11 +160,11 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
           <div className="space-y-2 text-sm text-slate-600">
             <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
               <span className="font-medium text-slate-700">Created</span>
-              <span>{product.createdAt.toLocaleDateString("en-PH", { dateStyle: "medium" })}</span>
+              <span>{formatDateMNL(product.createdAt)}</span>
             </div>
             <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
               <span className="font-medium text-slate-700">Last updated</span>
-              <span>{product.updatedAt.toLocaleDateString("en-PH", { dateStyle: "medium" })}</span>
+              <span>{formatDateMNL(product.updatedAt)}</span>
             </div>
           </div>
 

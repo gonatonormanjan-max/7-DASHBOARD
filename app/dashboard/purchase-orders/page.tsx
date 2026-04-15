@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/dal/auth";
 import { getPurchaseOrderListData } from "@/lib/dal/purchase-orders";
 import { parsePurchaseOrderListFilters } from "@/lib/validators/purchase-orders";
 import { formatCurrency } from "@/lib/products";
+import { formatDateMNL } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
@@ -192,9 +193,7 @@ export default async function PurchaseOrdersPage({
                       {formatCurrency(order.totalAmount.toString())}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-500">
-                      {order.createdAt.toLocaleDateString("en-PH", {
-                        dateStyle: "medium",
-                      })}
+                      {formatDateMNL(order.createdAt)}
                     </td>
                   </tr>
                 ))

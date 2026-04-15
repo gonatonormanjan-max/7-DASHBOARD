@@ -16,6 +16,30 @@
  */
 
 export const BUSINESS_TIMEZONE = "Asia/Manila";
+const MISSING_DATE_VALUE = "";
+type DateInput = Date | string | null | undefined;
+
+function toValidDate(value: DateInput): Date | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  // Treat YYYY-MM-DD as UTC midnight so labels stay stable across runtimes.
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+    ? `${trimmed}T00:00:00.000Z`
+    : trimmed;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 // ---------------------------------------------------------------------------
 // Display formatters — always render in the business timezone so that
@@ -24,8 +48,13 @@ export const BUSINESS_TIMEZONE = "Asia/Manila";
 // ---------------------------------------------------------------------------
 
 /** "Apr 13, 2026" */
-export function formatDatePH(date: Date): string {
-  return date.toLocaleDateString("en-US", {
+export function formatDateMNL(date: DateInput): string {
+  const resolvedDate = toValidDate(date);
+  if (!resolvedDate) {
+    return MISSING_DATE_VALUE;
+  }
+
+  return resolvedDate.toLocaleDateString("en-US", {
     timeZone: BUSINESS_TIMEZONE,
     month: "short",
     day: "numeric",
@@ -34,8 +63,13 @@ export function formatDatePH(date: Date): string {
 }
 
 /** "Apr 13" — no year, used in compact/relative time displays */
-export function formatShortDatePH(date: Date): string {
-  return date.toLocaleDateString("en-US", {
+export function formatShortDateMNL(date: DateInput): string {
+  const resolvedDate = toValidDate(date);
+  if (!resolvedDate) {
+    return MISSING_DATE_VALUE;
+  }
+
+  return resolvedDate.toLocaleDateString("en-US", {
     timeZone: BUSINESS_TIMEZONE,
     month: "short",
     day: "numeric",
@@ -43,8 +77,13 @@ export function formatShortDatePH(date: Date): string {
 }
 
 /** "7:00 PM" */
-export function formatTimePH(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
+export function formatTimeMNL(date: DateInput): string {
+  const resolvedDate = toValidDate(date);
+  if (!resolvedDate) {
+    return MISSING_DATE_VALUE;
+  }
+
+  return resolvedDate.toLocaleTimeString("en-US", {
     timeZone: BUSINESS_TIMEZONE,
     hour: "numeric",
     minute: "2-digit",
@@ -52,12 +91,51 @@ export function formatTimePH(date: Date): string {
 }
 
 /** "Apr 13, 2026, 7:00 PM" */
-export function formatDateTimePH(date: Date): string {
-  return date.toLocaleString("en-US", {
+export function formatDateTimeMNL(date: DateInput): string {
+  const resolvedDate = toValidDate(date);
+  if (!resolvedDate) {
+    return MISSING_DATE_VALUE;
+  }
+
+  return resolvedDate.toLocaleString("en-US", {
     timeZone: BUSINESS_TIMEZONE,
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+/** "Apr 26" year, used in month-based chart labels */
+export function formatMonthYearMNL(
+  date: DateInput,
+  year: "2-digit" | "numeric" = "2-digit"
+): string {
+  const resolvedDate = toValidDate(date);
+  if (!resolvedDate) {
+    return MISSING_DATE_VALUE;
+  }
+
+  return resolvedDate.toLocaleDateString("en-US", {
+    timeZone: BUSINESS_TIMEZONE,
+    month: "short",
+    year,
+  });
+}
+
+// Backward-compatible aliases used across the app.
+export function formatDatePH(date: DateInput): string {
+  return formatDateMNL(date);
+}
+
+export function formatShortDatePH(date: DateInput): string {
+  return formatShortDateMNL(date);
+}
+
+export function formatTimePH(date: DateInput): string {
+  return formatTimeMNL(date);
+}
+
+export function formatDateTimePH(date: DateInput): string {
+  return formatDateTimeMNL(date);
 }
 
 /**
@@ -156,3 +234,4 @@ function getUTCOffsetMs(date: Date, timeZone: string): number {
   // original UTC timestamp is the UTC offset.
   return localDate.getTime() - date.getTime();
 }
+
