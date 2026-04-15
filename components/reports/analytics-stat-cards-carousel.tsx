@@ -88,7 +88,9 @@ export function AnalyticsStatCardsCarousel({ cards }: AnalyticsStatCardsCarousel
             aria-label="Next metrics"
             disabled={!canGoNext}
             onClick={() =>
-              setStartIndex((current) => Math.min(maxStartIndex, Math.min(current, maxStartIndex) + 1))
+              setStartIndex((current) =>
+                Math.min(maxStartIndex, Math.min(current, maxStartIndex) + 1)
+              )
             }
             size="sm"
             type="button"

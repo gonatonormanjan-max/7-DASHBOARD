@@ -6,10 +6,11 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
 } from "react";
 
 const DASHBOARD_THEME_STORAGE_KEY = "northstar:dashboard-theme";
+const DASHBOARD_THEME_EVENT = "northstar:dashboard-theme-change";
 const DEFAULT_DASHBOARD_THEME: DashboardTheme = "dispoz";
 
 export type DashboardTheme = "dispoz" | "light" | "system";
@@ -51,47 +52,79 @@ function isDashboardTheme(value: string | null): value is DashboardTheme {
   return value === "dispoz" || value === "light" || value === "system";
 }
 
+function readStoredDashboardTheme(): string | null {
+  try {
+    return window.localStorage.getItem(DASHBOARD_THEME_STORAGE_KEY);
+  } catch {}
+
+  return null;
+}
+
+function readThemeSnapshot(): DashboardTheme {
+  const storedTheme = readStoredDashboardTheme();
+  return isDashboardTheme(storedTheme) ? storedTheme : DEFAULT_DASHBOARD_THEME;
+}
+
+function subscribeThemePreference(onStoreChange: () => void) {
+  const handleChange = () => {
+    onStoreChange();
+  };
+
+  window.addEventListener("storage", handleChange);
+  window.addEventListener(DASHBOARD_THEME_EVENT, handleChange as EventListener);
+
+  return () => {
+    window.removeEventListener("storage", handleChange);
+    window.removeEventListener(DASHBOARD_THEME_EVENT, handleChange as EventListener);
+  };
+}
+
 export function DashboardThemeProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [theme, setThemeState] = useState<DashboardTheme>(() => {
-    if (typeof window === "undefined") {
-      return DEFAULT_DASHBOARD_THEME;
-    }
-
-    try {
-      const storedTheme = window.localStorage.getItem(DASHBOARD_THEME_STORAGE_KEY);
-      if (isDashboardTheme(storedTheme)) {
-        return storedTheme;
-      }
-      // Users previously on removed themes (e.g. "dark") fall back to default.
-      if (storedTheme !== null) {
-        window.localStorage.setItem(DASHBOARD_THEME_STORAGE_KEY, DEFAULT_DASHBOARD_THEME);
-      }
-    } catch {}
-
-    return DEFAULT_DASHBOARD_THEME;
-  });
+  const theme = useSyncExternalStore(
+    subscribeThemePreference,
+    readThemeSnapshot,
+    () => DEFAULT_DASHBOARD_THEME
+  );
 
   // Dark mode is removed. `system` always resolves to the light palette.
   const resolvedTheme: ResolvedDashboardTheme =
     theme === "system" ? "light" : theme;
 
   const setTheme = useCallback((nextTheme: DashboardTheme) => {
-    setThemeState(nextTheme);
+    try {
+      window.localStorage.setItem(DASHBOARD_THEME_STORAGE_KEY, nextTheme);
+      window.dispatchEvent(new Event(DASHBOARD_THEME_EVENT));
+    } catch {}
   }, []);
 
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = resolvedTheme;
     root.style.colorScheme = "light";
+  }, [resolvedTheme]);
 
-    try {
-      window.localStorage.setItem(DASHBOARD_THEME_STORAGE_KEY, theme);
-    } catch {}
-  }, [resolvedTheme, theme]);
+  useEffect(() => {
+    const storedTheme = readStoredDashboardTheme();
+
+    // Users previously on removed themes (e.g. "dark") fall back to default.
+    if (storedTheme !== null && !isDashboardTheme(storedTheme)) {
+      try {
+        window.localStorage.setItem(DASHBOARD_THEME_STORAGE_KEY, DEFAULT_DASHBOARD_THEME);
+        window.dispatchEvent(new Event(DASHBOARD_THEME_EVENT));
+      } catch {}
+      return;
+    }
+
+    if (storedTheme === null) {
+      try {
+        window.localStorage.setItem(DASHBOARD_THEME_STORAGE_KEY, DEFAULT_DASHBOARD_THEME);
+      } catch {}
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
