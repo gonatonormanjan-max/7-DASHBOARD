@@ -11,6 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { formatShortDateMNL } from "@/lib/timezone";
 import { ChartCard } from "./chart-card";
 
 type SalesTrendChartProps = {
@@ -21,8 +22,7 @@ type SalesTrendChartProps = {
 };
 
 function formatDate(dateStr: string) {
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric" });
+  return formatShortDateMNL(dateStr);
 }
 
 function formatCurrencyTick(value: number) {

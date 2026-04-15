@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getMovementTypeLabel } from "@/lib/inventory";
+import { formatDateMNL, formatDateTimeMNL, formatTimeMNL } from "@/lib/timezone";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getLocationById } from "@/lib/dal/locations";
@@ -128,17 +129,11 @@ export default async function LocationDetailPage({ params }: LocationDetailPageP
           />
           <DetailField
             label="Created"
-            value={location.createdAt.toLocaleString("en-US", {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })}
+            value={formatDateTimeMNL(location.createdAt)}
           />
           <DetailField
             label="Last updated"
-            value={location.updatedAt.toLocaleString("en-US", {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })}
+            value={formatDateTimeMNL(location.updatedAt)}
           />
           <DetailField
             label="Status"
@@ -278,16 +273,9 @@ export default async function LocationDetailPage({ params }: LocationDetailPageP
                   {location.movements.map((movement) => (
                     <tr key={movement.id}>
                       <td className="px-5 py-4 text-sm text-slate-500">
-                        {movement.createdAt.toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
+                        {formatDateMNL(movement.createdAt)}
                         <p className="mt-1 text-xs text-slate-400">
-                          {movement.createdAt.toLocaleTimeString("en-US", {
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
+                          {formatTimeMNL(movement.createdAt)}
                         </p>
                       </td>
                       <td className="px-5 py-4">

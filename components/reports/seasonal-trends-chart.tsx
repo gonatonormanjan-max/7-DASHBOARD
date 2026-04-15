@@ -10,6 +10,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { formatMonthYearMNL } from "@/lib/timezone";
 import { ChartCard } from "./chart-card";
 
 const BRANCH_COLORS = [
@@ -29,9 +30,7 @@ type SeasonalTrendsChartProps = {
 };
 
 function formatMonth(monthStr: string) {
-  const [year, month] = monthStr.split("-");
-  const date = new Date(Number(year), Number(month) - 1, 1);
-  return date.toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", year: "2-digit" });
+  return formatMonthYearMNL(`${monthStr}-01`);
 }
 
 function formatCurrencyTick(value: number) {

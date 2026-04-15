@@ -11,6 +11,7 @@ import {
 } from "@/lib/dal/reports";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { formatCurrency } from "@/lib/products";
+import { formatShortDateMNL } from "@/lib/timezone";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { TabToggle } from "@/components/ui/tab-toggle";
@@ -72,8 +73,7 @@ function parseQuotaMetric(value: string | undefined): QuotaMetric {
 }
 
 function formatShortDate(dateString: string) {
-  const date = new Date(dateString + "T00:00:00");
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return formatShortDateMNL(dateString);
 }
 
 function formatUnits(value: number) {
