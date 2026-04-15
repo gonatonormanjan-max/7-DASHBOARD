@@ -89,7 +89,7 @@ export function UserForm({
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
             defaultValue={fieldValue(state, "email", user?.email)}
             name="email"
-            placeholder="lead@northstar.local"
+            placeholder="lead@example.com"
             required
             type="email"
           />

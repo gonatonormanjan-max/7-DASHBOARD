@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LocationType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { LocationActiveToggle } from "@/components/locations/location-active-toggle";
+import { formatDatePH } from "@/lib/timezone";
 
 type LocationRow = {
   id: string;
@@ -106,11 +107,7 @@ export function LocationsTable({
                   {location.managerName?.trim() || "No manager assigned."}
                   <p className="mt-1 text-xs text-slate-400">
                     Updated{" "}
-                    {location.updatedAt.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {formatDatePH(location.updatedAt)}
                   </p>
                 </td>
                 <td className="px-5 py-4">

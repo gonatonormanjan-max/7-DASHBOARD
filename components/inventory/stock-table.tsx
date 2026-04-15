@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getAvailableQuantity } from "@/lib/inventory";
+import { formatDatePH } from "@/lib/timezone";
 
 type StockRow = {
   id: string;
@@ -114,11 +115,7 @@ export function InventoryStockTable({ stockRows }: InventoryStockTableProps) {
                     {row.product.brand?.name ?? "Unbranded"}
                   </td>
                   <td className="px-5 py-4 text-sm text-slate-500">
-                    {row.updatedAt.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {formatDatePH(row.updatedAt)}
                   </td>
                 </tr>
               );

@@ -1,4 +1,5 @@
 import type { ReportMetricContext } from "@/lib/dal/reports";
+import { formatDateTimePH } from "@/lib/timezone";
 
 type MetricContextStripProps = {
   context: ReportMetricContext;
@@ -51,7 +52,7 @@ export function MetricContextStrip({ context }: MetricContextStripProps) {
         </p>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        Recalculated {recalculatedAt.toLocaleString("en-US")}. Archived orders are{" "}
+        Recalculated {formatDateTimePH(recalculatedAt)}. Archived orders are{" "}
         {context.archivedOrdersPolicy}.
       </p>
     </section>

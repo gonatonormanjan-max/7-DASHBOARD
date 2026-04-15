@@ -31,7 +31,7 @@ type SeasonalTrendsChartProps = {
 function formatMonth(monthStr: string) {
   const [year, month] = monthStr.split("-");
   const date = new Date(Number(year), Number(month) - 1, 1);
-  return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  return date.toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", year: "2-digit" });
 }
 
 function formatCurrencyTick(value: number) {

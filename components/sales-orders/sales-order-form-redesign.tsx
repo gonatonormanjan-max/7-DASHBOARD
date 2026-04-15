@@ -799,7 +799,7 @@ export function SalesOrderFormRedesign({
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
                 name="customerName"
                 onChange={(event) => setCustomerName(event.target.value)}
-                placeholder="Optional for drafts, or use walk-in sale"
+                placeholder="Enter customer name, or use walk-in sale"
                 type="text"
                 value={customerName}
               />
@@ -1352,15 +1352,6 @@ export function SalesOrderFormRedesign({
               >
                 Cancel
               </Link>
-              <SubmitButton
-                disabled={!isReady || !saleWarehouseId || cart.length === 0}
-                name="intent"
-                pendingLabel="Saving draft..."
-                value="draft"
-                variant="outline"
-              >
-                Save draft
-              </SubmitButton>
               <Button
                 type="button"
                 className="px-8 py-3 text-base font-semibold"

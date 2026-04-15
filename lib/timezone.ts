@@ -15,7 +15,50 @@
  *     midnight-in-business-TZ is deterministic regardless of where the server runs.
  */
 
-const BUSINESS_TIMEZONE = "Asia/Manila";
+export const BUSINESS_TIMEZONE = "Asia/Manila";
+
+// ---------------------------------------------------------------------------
+// Display formatters — always render in the business timezone so that
+// timestamps shown to staff match Philippines local time regardless of where
+// the Vercel function happens to run.
+// ---------------------------------------------------------------------------
+
+/** "Apr 13, 2026" */
+export function formatDatePH(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    timeZone: BUSINESS_TIMEZONE,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/** "Apr 13" — no year, used in compact/relative time displays */
+export function formatShortDatePH(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    timeZone: BUSINESS_TIMEZONE,
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/** "7:00 PM" */
+export function formatTimePH(date: Date): string {
+  return date.toLocaleTimeString("en-US", {
+    timeZone: BUSINESS_TIMEZONE,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** "Apr 13, 2026, 7:00 PM" */
+export function formatDateTimePH(date: Date): string {
+  return date.toLocaleString("en-US", {
+    timeZone: BUSINESS_TIMEZONE,
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
 /**
  * Returns a UTC Date object that corresponds to midnight (00:00:00.000) at the

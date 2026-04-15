@@ -17,7 +17,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Northstar Inventory",
+  title: "7-Dashboard",
   description: "Internal inventory operations and warehouse control center",
 };
 

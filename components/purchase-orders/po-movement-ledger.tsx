@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatDateTimePH } from "@/lib/timezone";
 
 type Movement = {
   id: string;
@@ -18,14 +19,7 @@ type POMovementLedgerProps = {
 };
 
 function formatDateTime(date: Date) {
-  return date.toLocaleString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return formatDateTimePH(date);
 }
 
 export function POMovementLedger({ movements }: POMovementLedgerProps) {
