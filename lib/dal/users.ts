@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
+import { LocationType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { UserListFilters } from "@/lib/validators/users";
 
@@ -34,6 +34,13 @@ export async function getUserListData(filters: UserListFilters) {
         email: true,
         role: true,
         isActive: true,
+        assignedLocation: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
         createdAt: true,
       },
     }),
@@ -60,6 +67,8 @@ export async function getUserListData(filters: UserListFilters) {
       admins: groupedByRole.find((item) => item.role === "ADMIN")?._count._all ?? 0,
       systemManagers:
         groupedByRole.find((item) => item.role === "SYSTEM_MANAGER")?._count._all ?? 0,
+      managers:
+        groupedByRole.find((item) => item.role === "MANAGER")?._count._all ?? 0,
       salesStaff:
         groupedByRole.find((item) => item.role === "SALES_STAFF")?._count._all ?? 0,
       active:
@@ -79,9 +88,34 @@ export async function getUserById(id: string) {
       lastName: true,
       email: true,
       role: true,
+      assignedLocationId: true,
       isActive: true,
       createdAt: true,
       updatedAt: true,
+    },
+  });
+}
+
+export async function getManagerBranchOptions(currentAssignedLocationId?: string) {
+  const where: Prisma.StockLocationWhereInput = {
+    type: LocationType.BRANCH,
+    ...(currentAssignedLocationId
+      ? {
+          OR: [{ isActive: true }, { id: currentAssignedLocationId }],
+        }
+      : {
+          isActive: true,
+        }),
+  };
+
+  return prisma.stockLocation.findMany({
+    where,
+    orderBy: [{ isActive: "desc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      isActive: true,
     },
   });
 }

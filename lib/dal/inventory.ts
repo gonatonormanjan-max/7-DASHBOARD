@@ -572,4 +572,118 @@ export async function getInventoryPageData(
     summary,
   };
 }
- 
+
+export type ReserveCorrectionRow = {
+  id: string;
+  locationId: string;
+  productId: string;
+  locationName: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  reservedQty: number;
+  openConfirmedOrdersQty: number;
+  variance: number;
+  ghostQty: number;
+  availableQty: number;
+};
+
+export async function getReserveCorrectionRows(): Promise<ReserveCorrectionRow[]> {
+  const rows = await prisma.locationStock.findMany({
+    where: {
+      reservedQty: {
+        gt: 0,
+      },
+    },
+    select: {
+      id: true,
+      locationId: true,
+      productId: true,
+      quantity: true,
+      reservedQty: true,
+      location: {
+        select: {
+          name: true,
+        },
+      },
+      product: {
+        select: {
+          name: true,
+          sku: true,
+        },
+      },
+    },
+  });
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const locationIds = [...new Set(rows.map((row) => row.locationId))];
+  const productIds = [...new Set(rows.map((row) => row.productId))];
+  const confirmedItems = await prisma.salesOrderItem.findMany({
+    where: {
+      locationId: {
+        in: locationIds,
+      },
+      productId: {
+        in: productIds,
+      },
+      salesOrder: {
+        status: "CONFIRMED",
+      },
+    },
+    select: {
+      locationId: true,
+      productId: true,
+      quantity: true,
+    },
+  });
+
+  const confirmedQtyByPair = new Map<string, number>();
+
+  for (const item of confirmedItems) {
+    const key = `${item.locationId}:${item.productId}`;
+    const current = confirmedQtyByPair.get(key) ?? 0;
+    confirmedQtyByPair.set(key, current + item.quantity);
+  }
+
+  return rows
+    .map((row) => {
+      const key = `${row.locationId}:${row.productId}`;
+      const openConfirmedOrdersQty = confirmedQtyByPair.get(key) ?? 0;
+      const variance = row.reservedQty - openConfirmedOrdersQty;
+      const ghostQty = Math.max(variance, 0);
+
+      return {
+        id: row.id,
+        locationId: row.locationId,
+        productId: row.productId,
+        locationName: row.location.name,
+        productName: row.product.name,
+        sku: row.product.sku,
+        quantity: row.quantity,
+        reservedQty: row.reservedQty,
+        openConfirmedOrdersQty,
+        variance,
+        ghostQty,
+        availableQty: getAvailableQuantity(row.quantity, row.reservedQty),
+      };
+    })
+    .sort((left, right) => {
+      if (left.ghostQty !== right.ghostQty) {
+        return right.ghostQty - left.ghostQty;
+      }
+
+      if (left.variance !== right.variance) {
+        return right.variance - left.variance;
+      }
+
+      const locationComparison = left.locationName.localeCompare(right.locationName);
+      if (locationComparison !== 0) {
+        return locationComparison;
+      }
+
+      return left.productName.localeCompare(right.productName);
+    });
+}

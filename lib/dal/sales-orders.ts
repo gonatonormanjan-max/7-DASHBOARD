@@ -365,7 +365,21 @@ export async function getSalesOrderById(
 }
 
 export async function getSalesOrderFormOptions(options: SalesOrderScopeOptions = {}) {
-  const [locations, products, stockRows] = await Promise.all([
+  // When a specific branch is locked (SALES_STAFF / MANAGER), also fetch any
+  // branch-level price overrides so the cart form shows the correct price when
+  // a product is added. Runs in parallel with the other queries.
+  // Uses raw SQL so it works even when the Prisma client is stale. Falls back
+  // to an empty array (global prices) if the table doesn't exist yet.
+  type RawOverrideRow = { productId: string; price: string };
+  const branchPriceOverrideQuery: Promise<RawOverrideRow[]> = options.locationId
+    ? (prisma.$queryRaw`
+        SELECT "productId", price::text AS price
+        FROM "LocationProductPrice"
+        WHERE "locationId" = ${options.locationId}
+      ` as Promise<RawOverrideRow[]>).catch(() => [])
+    : Promise.resolve([]);
+
+  const [locations, products, stockRows, branchPriceOverrides] = await Promise.all([
     prisma.stockLocation.findMany({
       where: {
         isActive: true,
@@ -405,13 +419,21 @@ export async function getSalesOrderFormOptions(options: SalesOrderScopeOptions =
         reservedQty: true,
       },
     }),
+    branchPriceOverrideQuery,
   ]);
+
+  // Build a fast look-up map: productId → branch override price string.
+  // Only populated when a specific branch is locked.
+  const overrideMap = new Map(
+    branchPriceOverrides.map((o) => [o.productId, o.price.toString()])
+  );
 
   return {
     locations,
     products: products.map((p) => ({
       ...p,
-      unitPrice: p.unitPrice.toString(),
+      // Use the branch override price if one exists; otherwise the global price.
+      unitPrice: overrideMap.get(p.id) ?? p.unitPrice.toString(),
     })),
     stockRows: stockRows.map((row) => ({
       locationId: row.locationId,

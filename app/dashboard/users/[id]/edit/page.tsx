@@ -3,7 +3,7 @@ import { getRoleLabel } from "@/lib/permissions";
 import { withFlashMessage } from "@/lib/flash-toast";
 import { updateUserAction } from "@/lib/actions/users";
 import { requirePermission } from "@/lib/dal/auth";
-import { getUserById } from "@/lib/dal/users";
+import { getManagerBranchOptions, getUserById } from "@/lib/dal/users";
 import { canManageTargetUser, getAssignableRolesForActor } from "@/lib/users";
 import { PageHeader } from "@/components/ui/page-header";
 import { UserForm } from "@/components/users/user-form";
@@ -33,6 +33,11 @@ export default async function EditUserPage({ params }: EditUserPageProps) {
     value: role,
     label: getRoleLabel(role),
   }));
+  const branches = await getManagerBranchOptions(user.assignedLocationId ?? undefined);
+  const locationOptions = branches.map((branch) => ({
+    value: branch.id,
+    label: `${branch.name} (${branch.code})${branch.isActive ? "" : " - inactive"}`,
+  }));
   const boundUpdateAction = updateUserAction.bind(null, user.id);
 
   return (
@@ -46,6 +51,7 @@ export default async function EditUserPage({ params }: EditUserPageProps) {
       <UserForm
         action={boundUpdateAction}
         isSelf={actor.id === user.id}
+        locationOptions={locationOptions}
         mode="edit"
         roleOptions={roleOptions}
         user={{
@@ -54,6 +60,7 @@ export default async function EditUserPage({ params }: EditUserPageProps) {
           lastName: user.lastName,
           email: user.email,
           role: user.role,
+          assignedLocationId: user.assignedLocationId,
           isActive: user.isActive,
         }}
       />

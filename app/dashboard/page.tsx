@@ -1,17 +1,18 @@
 import Link from "next/link";
+import type { Role } from "@prisma/client";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getDashboardData } from "@/lib/dal/dashboard";
+import { getPendingAdjustmentRequestCount } from "@/lib/dal/adjustment-requests";
 import { hasPermission, type PermissionResource } from "@/lib/permissions";
 
 const roleCopy = {
   ADMIN: {
     eyebrow: "Welcome back",
     title: "Admin Dashboard",
-    description:
-      "",
+    description: "",
   },
   SYSTEM_MANAGER: {
     eyebrow: "Welcome back",
@@ -19,13 +20,26 @@ const roleCopy = {
     description:
       "Manage daily inventory operations, monitor stock health, and coordinate across locations.",
   },
+  MANAGER: {
+    eyebrow: "Welcome back",
+    title: "Branch Dashboard",
+    description:
+      "Monitor your branch's stock health, record sales, and submit adjustment requests for admin approval.",
+  },
   SALES_STAFF: {
     eyebrow: "Welcome back",
     title: "Sales Workspace",
     description:
       "Monitor product availability and record sales orders for your selected branch.",
   },
-} as const;
+} satisfies Record<
+  Role,
+  {
+    eyebrow: string;
+    title: string;
+    description: string;
+  }
+>;
 
 const moduleLinks: Array<{
   title: string;
@@ -148,11 +162,13 @@ export default async function DashboardPage() {
     returnTo: "/dashboard",
   });
   const copy = roleCopy[user.role];
-  const dashboardData = await getDashboardData(
-    user.id,
-    user.role,
-    activeLocationId
-  );
+
+  const [dashboardData, pendingAdjustmentCount] = await Promise.all([
+    getDashboardData(user.id, user.role, activeLocationId),
+    hasPermission(user.role, "adjustment_requests", "approve")
+      ? getPendingAdjustmentRequestCount(user)
+      : Promise.resolve(0),
+  ]);
   const revenueToday = currencyFormatter.format(dashboardData.revenueToday);
   const warehouses = dashboardData.locationHealth.filter(
     (location) => location.type === "WAREHOUSE"
@@ -222,12 +238,26 @@ export default async function DashboardPage() {
               tone={dashboardData.lowStockAlerts > 0 ? "warning" : "success"}
               value={dashboardData.lowStockAlerts.toLocaleString("en-US")}
             />
-            <DashboardStatLinkCard
-              description={`${formatLocationCount(warehouses, "warehouse", "warehouses")}, ${formatLocationCount(branches, "branch", "branches")}`}
-              label="Locations Active"
-              tone="primary"
-              value={dashboardData.locationHealth.length.toLocaleString("en-US")}
-            />
+            {hasPermission(user.role, "adjustment_requests", "approve") ? (
+              <DashboardStatLinkCard
+                description={
+                  pendingAdjustmentCount > 0
+                    ? "Branch manager requests awaiting your review"
+                    : "No pending adjustment requests"
+                }
+                href="/dashboard/inventory/adjustment-requests"
+                label="Pending Adjustments"
+                tone={pendingAdjustmentCount > 0 ? "warning" : "success"}
+                value={pendingAdjustmentCount.toLocaleString("en-US")}
+              />
+            ) : (
+              <DashboardStatLinkCard
+                description={`${formatLocationCount(warehouses, "warehouse", "warehouses")}, ${formatLocationCount(branches, "branch", "branches")}`}
+                label="Locations Active"
+                tone="primary"
+                value={dashboardData.locationHealth.length.toLocaleString("en-US")}
+              />
+            )}
           </>
         )}
       </section>
