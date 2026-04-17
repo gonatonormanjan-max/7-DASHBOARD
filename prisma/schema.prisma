@@ -9,6 +9,7 @@ datasource db {
 enum Role {
   ADMIN
   SYSTEM_MANAGER
+  MANAGER
   SALES_STAFF
 }
 
@@ -63,26 +64,55 @@ enum MovementType {
   INITIAL_STOCK
 }
 
+enum AdjustmentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VaultTransactionType {
+  SALE
+  VOID_REVERSAL
+  CASH_DROP
+  OPENING_FLOAT
+  MANUAL_ADJUSTMENT
+}
+
+enum VaultPaymentMethod {
+  CASH
+  ONLINE
+}
+
+enum CashDropDestination {
+  SAFE
+  BANK_DEPOSIT
+  HANDED_TO_ADMIN
+  OTHERS
+}
+
 model User {
-  id                      String               @id @default(uuid())
-  firstName               String
-  lastName                String
-  email                   String               @unique
-  hashedPassword          String
-  role                    Role                 @default(SALES_STAFF)
-  isActive                Boolean              @default(true)
-  assignedLocationId      String?
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
-  assignedLocation        StockLocation?       @relation(fields: [assignedLocationId], references: [id], onDelete: SetNull)
-  accounts                Account[]
-  createdPurchaseOrders   PurchaseOrder[]      @relation("PurchaseOrderCreatedBy")
-  approvedPurchaseOrders  PurchaseOrder[]      @relation("PurchaseOrderApprovedBy")
-  createdSalesOrders      SalesOrder[]         @relation("SalesOrderCreatedBy")
-  voidedSalesOrders       SalesOrder[]         @relation("SalesOrderVoidedBy")
-  inventoryMovements      InventoryMovement[]
-  auditLogs               AuditLog[]
-  productCostHistory      ProductCostHistory[]
+  id                         String               @id @default(uuid())
+  firstName                  String
+  lastName                   String
+  email                      String               @unique
+  hashedPassword             String
+  role                       Role                 @default(SALES_STAFF)
+  isActive                   Boolean              @default(true)
+  assignedLocationId         String?
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+  assignedLocation           StockLocation?       @relation(fields: [assignedLocationId], references: [id], onDelete: SetNull)
+  accounts                   Account[]
+  createdPurchaseOrders      PurchaseOrder[]      @relation("PurchaseOrderCreatedBy")
+  approvedPurchaseOrders     PurchaseOrder[]      @relation("PurchaseOrderApprovedBy")
+  createdSalesOrders         SalesOrder[]         @relation("SalesOrderCreatedBy")
+  voidedSalesOrders          SalesOrder[]         @relation("SalesOrderVoidedBy")
+  inventoryMovements         InventoryMovement[]
+  auditLogs                  AuditLog[]
+  productCostHistory         ProductCostHistory[]
+  adjustmentRequestsMade     AdjustmentRequest[]  @relation("AdjustmentRequestedBy")
+  adjustmentRequestsReviewed AdjustmentRequest[]  @relation("AdjustmentReviewedBy")
+  vaultTransactions          VaultTransaction[]
 }
 
 model Account {
@@ -153,28 +183,30 @@ model ProductSupplier {
 }
 
 model Product {
-  id            String                @id @default(uuid())
-  name          String
-  sku           String                @unique
-  description   String?
-  unitPrice     Decimal               @db.Decimal(12, 2)
-  costPrice     Decimal               @db.Decimal(12, 2)
-  reorderLevel  Int                   @default(0)
-  imageUrl      String?
-  status        ProductStatus         @default(ACTIVE)
-  categoryId    String
-  brandId       String?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  category      Category              @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  brand         Brand?                @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  suppliers     ProductSupplier[]
-  locationStock LocationStock[]
-  locationCosts LocationProductCost[]
-  costHistory   ProductCostHistory[]
-  purchaseItems PurchaseOrderItem[]
-  salesItems    SalesOrderItem[]
-  movements     InventoryMovement[]
+  id                 String                 @id @default(uuid())
+  name               String
+  sku                String                 @unique
+  description        String?
+  unitPrice          Decimal                @db.Decimal(12, 2)
+  costPrice          Decimal                @db.Decimal(12, 2)
+  reorderLevel       Int                    @default(0)
+  imageUrl           String?
+  status             ProductStatus          @default(ACTIVE)
+  categoryId         String
+  brandId            String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  category           Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand              Brand?                 @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  suppliers          ProductSupplier[]
+  locationStock      LocationStock[]
+  locationCosts      LocationProductCost[]
+  locationPrices     LocationProductPrice[]
+  costHistory        ProductCostHistory[]
+  purchaseItems      PurchaseOrderItem[]
+  salesItems         SalesOrderItem[]
+  movements          InventoryMovement[]
+  adjustmentRequests AdjustmentRequest[]
 
   @@index([name])
   @@index([categoryId])
@@ -183,37 +215,59 @@ model Product {
 }
 
 model StockLocation {
-  id            String                @id @default(uuid())
-  name          String                @unique
-  code          String                @unique
-  type          LocationType
-  address       String?
-  managerName   String?
-  contactNumber String?
-  isActive      Boolean               @default(true)
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  assignedUsers User[]
-  stock         LocationStock[]
-  productCosts  LocationProductCost[]
-  costHistory   ProductCostHistory[]
-  quotaSetting  BranchQuotaSetting?
-  salesOrders   SalesOrder[]         @relation("SalesOrderLocation")
-  salesItems    SalesOrderItem[]
-  movements     InventoryMovement[]
+  id                 String                 @id @default(uuid())
+  name               String                 @unique
+  code               String                 @unique
+  type               LocationType
+  address            String?
+  managerName        String?
+  contactNumber      String?
+  isActive           Boolean                @default(true)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  assignedUsers      User[]
+  stock              LocationStock[]
+  productCosts       LocationProductCost[]
+  costHistory        ProductCostHistory[]
+  quotaSetting       BranchQuotaSetting?
+  salesOrders        SalesOrder[]           @relation("SalesOrderLocation")
+  salesItems         SalesOrderItem[]
+  movements          InventoryMovement[]
+  adjustmentRequests AdjustmentRequest[]
+  locationPrices     LocationProductPrice[]
+  vault              BranchVault?
+  vaultTransactions  VaultTransaction[]
 }
 
 model BranchQuotaSetting {
-  id                String       @id @default(uuid())
-  branchId          String       @unique
-  rollingWindowDays Int          @default(30)
-  revenueTarget     Decimal?     @db.Decimal(12, 2)
+  id                String        @id @default(uuid())
+  branchId          String        @unique
+  rollingWindowDays Int           @default(30)
+  revenueTarget     Decimal?      @db.Decimal(12, 2)
   unitsTarget       Int?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
   branch            StockLocation @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([branchId])
+}
+
+// Stores per-branch selling price overrides for products.
+// When a row exists for a (locationId, productId) pair, that price is used
+// instead of the product's global unitPrice for sales at that branch.
+// Fallback: if no row exists, the product's global unitPrice applies.
+model LocationProductPrice {
+  id         String        @id @default(uuid())
+  locationId String
+  productId  String
+  price      Decimal       @db.Decimal(12, 2)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  location   StockLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  product    Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, productId])
+  @@index([productId])
 }
 
 model LocationStock {
@@ -229,6 +283,31 @@ model LocationStock {
 
   @@unique([locationId, productId])
   @@index([productId])
+}
+
+model AdjustmentRequest {
+  id            String                  @id @default(uuid())
+  branchId      String
+  productId     String
+  direction     String // "increase" | "decrease"
+  quantity      Int
+  reason        String
+  notes         String?
+  status        AdjustmentRequestStatus @default(PENDING)
+  requestedById String
+  requestedAt   DateTime                @default(now())
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewNotes   String?
+  branch        StockLocation           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  product       Product                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  requestedBy   User                    @relation("AdjustmentRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy    User?                   @relation("AdjustmentReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([branchId])
+  @@index([productId])
+  @@index([requestedById])
+  @@index([status])
 }
 
 model LocationProductCost {
@@ -309,16 +388,16 @@ model PurchaseOrderItem {
 }
 
 model SalesOrder {
-  id                String               @id @default(uuid())
-  orderNumber       String               @unique
+  id                String                @id @default(uuid())
+  orderNumber       String                @unique
   customerName      String
   customerEmail     String?
   locationId        String?
-  status            SalesOrderStatus     @default(DRAFT)
-  totalAmount       Decimal              @db.Decimal(12, 2)
+  status            SalesOrderStatus      @default(DRAFT)
+  totalAmount       Decimal               @db.Decimal(12, 2)
   paymentMode       PaymentMode?
-  cashAmount        Decimal?             @db.Decimal(12, 2)
-  onlineAmount      Decimal?             @db.Decimal(12, 2)
+  cashAmount        Decimal?              @db.Decimal(12, 2)
+  onlineAmount      Decimal?              @db.Decimal(12, 2)
   notes             String?
   archivedAt        DateTime?
   voidReason        SalesOrderVoidReason?
@@ -327,11 +406,11 @@ model SalesOrder {
   voidedAt          DateTime?
   createdById       String
   voidedById        String?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  location          StockLocation?       @relation("SalesOrderLocation", fields: [locationId], references: [id], onDelete: SetNull)
-  createdBy         User                 @relation("SalesOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  voidedBy          User?                @relation("SalesOrderVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  location          StockLocation?        @relation("SalesOrderLocation", fields: [locationId], references: [id], onDelete: SetNull)
+  createdBy         User                  @relation("SalesOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  voidedBy          User?                 @relation("SalesOrderVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
   items             SalesOrderItem[]
 
   @@index([status])
@@ -407,4 +486,47 @@ model LoginRateLimitBucket {
   updatedAt DateTime @updatedAt
 
   @@index([resetAt])
+}
+
+// Per-branch running balance for cash and online payments.
+// Denormalized cache — source of truth is VaultTransaction.
+// Always updated atomically inside the same $transaction that inserts
+// a VaultTransaction row.
+model BranchVault {
+  id            String        @id @default(uuid())
+  branchId      String        @unique
+  cashBalance   Decimal       @default(0) @db.Decimal(12, 2)
+  onlineBalance Decimal       @default(0) @db.Decimal(12, 2)
+  createdAt     DateTime      @default(now())
+  lastUpdatedAt DateTime      @updatedAt
+  branch        StockLocation @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+}
+
+// Immutable append-only ledger for every event that changes a BranchVault.
+// One row per payment method affected per event (a split sale creates two rows).
+// Signed amount: positive = credit to the branch, negative = debit.
+// Unique (referenceType, referenceId, type, paymentMethod) prevents duplicate
+// credits from retries or replayed transactions.
+model VaultTransaction {
+  id                  String               @id @default(uuid())
+  branchId            String
+  type                VaultTransactionType
+  paymentMethod       VaultPaymentMethod
+  amount              Decimal              @db.Decimal(12, 2)
+  referenceType       String?
+  referenceId         String?
+  cashDropDestination CashDropDestination?
+  destinationNote     String?
+  notes               String?
+  performedById       String
+  createdAt           DateTime             @default(now())
+  branch              StockLocation        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  performedBy         User                 @relation(fields: [performedById], references: [id], onDelete: Restrict)
+
+  @@unique([referenceType, referenceId, type, paymentMethod])
+  @@index([branchId, createdAt])
+  @@index([type, createdAt])
+  @@index([performedById])
 }
