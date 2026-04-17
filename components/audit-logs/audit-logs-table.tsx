@@ -92,6 +92,8 @@ function getRoleBadgeClass(role: AuditLogRow["user"]["role"]): string {
       return "border-[#c5e7db] bg-[#edf8f4] text-[#11664b]";
     case "SYSTEM_MANAGER":
       return "border-[#cfe0f4] bg-[#edf5ff] text-[#16324b]";
+    case "MANAGER":
+      return "border-violet-200 bg-violet-50 text-violet-800";
     case "SALES_STAFF":
       return "border-amber-200 bg-amber-50 text-[#8a5610]";
   }

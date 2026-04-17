@@ -15,7 +15,12 @@ if (!authSecret) {
 }
 
 function assertRole(value: unknown): Role {
-  if (value === "ADMIN" || value === "SYSTEM_MANAGER" || value === "SALES_STAFF") {
+  if (
+    value === "ADMIN" ||
+    value === "SYSTEM_MANAGER" ||
+    value === "MANAGER" ||
+    value === "SALES_STAFF"
+  ) {
     return value;
   }
 

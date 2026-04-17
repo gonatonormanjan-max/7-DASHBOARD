@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   initialUserFormState,
   type UserFormState,
@@ -16,12 +16,17 @@ type UserFormProps = {
     value: string;
     label: string;
   }>;
+  locationOptions: Array<{
+    value: string;
+    label: string;
+  }>;
   user?: {
     id: string;
     firstName: string;
     lastName: string;
     email: string;
     role: string;
+    assignedLocationId?: string | null;
     isActive: boolean;
   };
   isSelf?: boolean;
@@ -38,11 +43,16 @@ function fieldValue(
 export function UserForm({
   action,
   mode,
+  locationOptions,
   roleOptions,
   user,
   isSelf = false,
 }: UserFormProps) {
   const [state, formAction] = useActionState(action, initialUserFormState);
+  const [selectedRole, setSelectedRole] = useState(
+    user?.role ?? roleOptions[0]?.value ?? "SALES_STAFF"
+  );
+  const managerRequiresBranch = selectedRole === "MANAGER";
 
   return (
     <form action={formAction} className="space-y-6">
@@ -106,6 +116,7 @@ export function UserForm({
             defaultValue={fieldValue(state, "role", user?.role ?? roleOptions[0]?.value)}
             disabled={isSelf}
             name="role"
+            onChange={(event) => setSelectedRole(event.target.value)}
           >
             {roleOptions.map((role) => (
               <option key={role.value} value={role.value}>
@@ -120,6 +131,39 @@ export function UserForm({
           ) : null}
           {state.fieldErrors?.role ? (
             <p className="text-sm text-destructive">{state.fieldErrors.role[0]}</p>
+          ) : null}
+        </label>
+
+        <label className="block space-y-2 lg:col-span-2">
+          <span className="text-sm font-medium text-slate-700">Assigned branch</span>
+          <select
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+            defaultValue={fieldValue(
+              state,
+              "assignedLocationId",
+              user?.assignedLocationId
+            )}
+            name="assignedLocationId"
+            required={managerRequiresBranch}
+          >
+            <option value="">
+              {managerRequiresBranch ? "Select a branch" : "No branch assignment"}
+            </option>
+            {locationOptions.map((location) => (
+              <option key={location.value} value={location.value}>
+                {location.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-sm text-slate-500">
+            {managerRequiresBranch
+              ? "Manager accounts must be assigned to an active branch."
+              : "Only manager accounts use a fixed branch assignment."}
+          </p>
+          {state.fieldErrors?.assignedLocationId ? (
+            <p className="text-sm text-destructive">
+              {state.fieldErrors.assignedLocationId[0]}
+            </p>
           ) : null}
         </label>
 

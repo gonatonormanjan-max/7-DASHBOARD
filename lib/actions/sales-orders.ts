@@ -18,6 +18,7 @@ import {
   syncLocationCostSnapshot,
 } from "@/lib/costing";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
+import { buildBranchPriceMap } from "@/lib/pricing";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
 import {
@@ -766,6 +767,22 @@ export async function createSalesOrderAction(
     quantity: item.quantity,
     unitPrice: item.unitPrice,
   }));
+
+  // ── Server-side branch price enforcement ───────────────────────────────────
+  // Any unitPrice submitted by the client is overridden by the authoritative
+  // branch-level price from the database. This prevents price tampering and
+  // ensures branch-specific selling prices are always applied correctly.
+  {
+    const branchPriceMap = await buildBranchPriceMap(
+      preparedItems.map((i) => ({ productId: i.productId, locationId: i.locationId }))
+    );
+    for (const item of preparedItems) {
+      const override = branchPriceMap.get(`${item.productId}:${item.locationId}`);
+      if (override !== undefined) {
+        item.unitPrice = override;
+      }
+    }
+  }
 
   if (user.role === "SALES_STAFF" && activeLocationId) {
     const hasCrossBranchItem = preparedItems.some(

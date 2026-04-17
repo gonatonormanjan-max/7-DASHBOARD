@@ -83,6 +83,20 @@ function resolveInventoryReturnTo(formData: FormData, fallback: string) {
   return fallback;
 }
 
+function parseWholeNumber(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 function revalidateInventoryPaths(paths: string[] = []) {
   const allPaths = new Set<string>([
     "/dashboard/inventory",
@@ -1137,6 +1151,127 @@ export async function bulkStockSetupAction(
   redirect(
     withFlashMessage("/dashboard/inventory/stock-setup", {
       success: `Stock setup complete: ${totalUpdated} product${totalUpdated === 1 ? "" : "s"} updated at ${location.name}.`,
+    })
+  );
+}
+
+export async function correctReservedQtyAction(formData: FormData) {
+  const user = await requirePermission("inventory", "update");
+  if (user.role !== "ADMIN") {
+    redirect("/dashboard");
+  }
+
+  const reserveCorrectionPath = "/dashboard/inventory/reserve-correction";
+  const returnTo = resolveInventoryReturnTo(formData, reserveCorrectionPath);
+  const locationStockId = String(formData.get("locationStockId") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const newReservedQty = parseWholeNumber(formData.get("newReservedQty"));
+
+  if (!locationStockId) {
+    redirect(
+      withFlashMessage(returnTo, {
+        error: "Location stock record is missing.",
+      })
+    );
+  }
+
+  if (newReservedQty === null) {
+    redirect(
+      withFlashMessage(returnTo, {
+        error: "Correct reserved quantity must be a non-negative whole number.",
+      })
+    );
+  }
+
+  if (!reason) {
+    redirect(
+      withFlashMessage(returnTo, {
+        error: "Correction reason is required.",
+      })
+    );
+  }
+
+  if (reason.length > 500) {
+    redirect(
+      withFlashMessage(returnTo, {
+        error: "Correction reason must be 500 characters or fewer.",
+      })
+    );
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const stock = await tx.locationStock.findUnique({
+      where: {
+        id: locationStockId,
+      },
+      select: {
+        id: true,
+        locationId: true,
+        productId: true,
+        quantity: true,
+        reservedQty: true,
+      },
+    });
+
+    if (!stock) {
+      return {
+        ok: false as const,
+        error: "Location stock record no longer exists.",
+      };
+    }
+
+    if (newReservedQty > stock.quantity) {
+      return {
+        ok: false as const,
+        error: `Correct reserved quantity cannot exceed on-hand quantity (${stock.quantity.toLocaleString("en-US")}).`,
+      };
+    }
+
+    await tx.locationStock.update({
+      where: {
+        id: stock.id,
+      },
+      data: {
+        reservedQty: newReservedQty,
+      },
+    });
+
+    await logAudit(
+      {
+        userId: user.id,
+        action: "RESERVE_CORRECTION",
+        entity: "LocationStock",
+        entityId: stock.id,
+        details: {
+          locationId: stock.locationId,
+          productId: stock.productId,
+          oldReservedQty: stock.reservedQty,
+          newReservedQty,
+          reason,
+        },
+      },
+      tx
+    );
+
+    return {
+      ok: true as const,
+      locationId: stock.locationId,
+    };
+  });
+
+  if (!result.ok) {
+    redirect(
+      withFlashMessage(returnTo, {
+        error: result.error,
+      })
+    );
+  }
+
+  revalidatePath(reserveCorrectionPath);
+  revalidatePath(`/dashboard/inventory/${result.locationId}`);
+  redirect(
+    withFlashMessage(returnTo, {
+      success: "Reserved quantity corrected successfully.",
     })
   );
 }

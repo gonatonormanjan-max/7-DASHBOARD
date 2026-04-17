@@ -34,6 +34,7 @@ export function UsersFilters({ filters }: UsersFiltersProps) {
             <option value="all">All roles</option>
             <option value="ADMIN">Admin</option>
             <option value="SYSTEM_MANAGER">System Manager</option>
+            <option value="MANAGER">Manager</option>
             <option value="SALES_STAFF">Sales Staff</option>
           </select>
         </label>
@@ -54,7 +55,7 @@ export function UsersFilters({ filters }: UsersFiltersProps) {
 
       <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          Admins can assign all roles. System Managers can manage users but cannot create or edit Admin accounts.
+          Admins can assign all roles. Managers must be assigned to an active branch. System Managers cannot create or edit Admin or Manager accounts.
         </p>
         <div className="flex items-center gap-3">
           <Link href="/dashboard/users">

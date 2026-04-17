@@ -1,5 +1,6 @@
 "use server";
 
+import { LocationType, type Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
@@ -31,12 +32,45 @@ async function findUserByEmail(email: string, userId?: string) {
   });
 }
 
+async function resolveAssignedLocation(role: Role, assignedLocationId?: string) {
+  if (role !== "MANAGER") {
+    return {
+      assignedLocationId: null,
+      assignedLocationName: null,
+    };
+  }
+
+  if (!assignedLocationId) {
+    return null;
+  }
+
+  const branch = await prisma.stockLocation.findFirst({
+    where: {
+      id: assignedLocationId,
+      isActive: true,
+      type: LocationType.BRANCH,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  return branch
+    ? {
+        assignedLocationId: branch.id,
+        assignedLocationName: branch.name,
+      }
+    : null;
+}
+
 function buildChangedFields(
   currentUser: {
     firstName: string;
     lastName: string;
     email: string;
     role: string;
+    assignedLocationId: string | null;
     isActive: boolean;
   },
   nextUser: {
@@ -44,6 +78,7 @@ function buildChangedFields(
     lastName: string;
     email: string;
     role: string;
+    assignedLocationId: string | null;
     isActive: boolean;
   },
   passwordChanged: boolean
@@ -54,6 +89,9 @@ function buildChangedFields(
   if (currentUser.lastName !== nextUser.lastName) changedFields.push("lastName");
   if (currentUser.email !== nextUser.email) changedFields.push("email");
   if (currentUser.role !== nextUser.role) changedFields.push("role");
+  if (currentUser.assignedLocationId !== nextUser.assignedLocationId) {
+    changedFields.push("assignedLocationId");
+  }
   if (currentUser.isActive !== nextUser.isActive) changedFields.push("isActive");
   if (passwordChanged) changedFields.push("password");
 
@@ -104,6 +142,21 @@ export async function createUserAction(
   }
 
   const hashedPassword = await bcrypt.hash(parsed.data.password, 10);
+  const assignedLocation = await resolveAssignedLocation(
+    parsed.data.role,
+    parsed.data.assignedLocationId
+  );
+
+  if (!assignedLocation) {
+    return {
+      status: "error",
+      message: "Manager accounts must be assigned to an active branch.",
+      fieldErrors: {
+        assignedLocationId: ["Choose an active branch for this manager."],
+      },
+      values,
+    };
+  }
 
   await prisma.$transaction(async (tx) => {
     const createdUser = await tx.user.create({
@@ -114,7 +167,7 @@ export async function createUserAction(
         hashedPassword,
         role: parsed.data.role,
         isActive: parsed.data.isActive,
-        assignedLocationId: null,
+        assignedLocationId: assignedLocation.assignedLocationId,
       },
       select: {
         id: true,
@@ -132,6 +185,7 @@ export async function createUserAction(
         details: {
           email: createdUser.email,
           role: createdUser.role,
+          assignedLocationName: assignedLocation.assignedLocationName,
         },
       },
       tx
@@ -172,6 +226,7 @@ export async function updateUserAction(
       lastName: true,
       email: true,
       role: true,
+      assignedLocationId: true,
       isActive: true,
     },
   });
@@ -229,8 +284,30 @@ export async function updateUserAction(
   const hashedPassword = passwordChanged
     ? await bcrypt.hash(parsed.data.password.trim(), 10)
     : null;
+  const assignedLocation = await resolveAssignedLocation(
+    parsed.data.role,
+    parsed.data.assignedLocationId
+  );
 
-  const changedFields = buildChangedFields(currentUser, parsed.data, passwordChanged);
+  if (!assignedLocation) {
+    return {
+      status: "error",
+      message: "Manager accounts must be assigned to an active branch.",
+      fieldErrors: {
+        assignedLocationId: ["Choose an active branch for this manager."],
+      },
+      values,
+    };
+  }
+
+  const changedFields = buildChangedFields(
+    currentUser,
+    {
+      ...parsed.data,
+      assignedLocationId: assignedLocation.assignedLocationId,
+    },
+    passwordChanged
+  );
 
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
@@ -241,7 +318,7 @@ export async function updateUserAction(
         email: parsed.data.email,
         role: parsed.data.role,
         isActive: parsed.data.isActive,
-        assignedLocationId: null,
+        assignedLocationId: assignedLocation.assignedLocationId,
         ...(hashedPassword ? { hashedPassword } : {}),
       },
     });
@@ -255,6 +332,7 @@ export async function updateUserAction(
         details: {
           email: parsed.data.email,
           role: parsed.data.role,
+          assignedLocationName: assignedLocation.assignedLocationName,
           changedFields,
         },
       },

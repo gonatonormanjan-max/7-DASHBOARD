@@ -12,6 +12,11 @@ type UserRow = {
   email: string;
   role: Role;
   isActive: boolean;
+  assignedLocation: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
   createdAt: Date;
 };
 
@@ -26,7 +31,7 @@ export function UsersTable({ users, canManage }: UsersTableProps) {
       <div className="rounded-lg border border-dashed border-slate-300 bg-card px-6 py-16 text-center">
         <h2 className="text-lg font-semibold text-slate-900">No users found</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          Create an account here to grant Admin, System Manager, or Sales Staff access.
+          Create an account here to grant Admin, System Manager, Manager, or Sales Staff access.
         </p>
       </div>
     );
@@ -41,6 +46,7 @@ export function UsersTable({ users, canManage }: UsersTableProps) {
               <th className="px-5 py-4">User</th>
               <th className="px-5 py-4">Email</th>
               <th className="px-5 py-4">Access level</th>
+              <th className="px-5 py-4">Assigned branch</th>
               <th className="px-5 py-4">Status</th>
               <th className="px-5 py-4">Created</th>
               <th className="px-5 py-4 text-right">Actions</th>
@@ -57,6 +63,11 @@ export function UsersTable({ users, canManage }: UsersTableProps) {
                 <td className="px-5 py-4 text-sm text-slate-600">{user.email}</td>
                 <td className="px-5 py-4 text-sm text-slate-600">
                   {getRoleLabel(user.role)}
+                </td>
+                <td className="px-5 py-4 text-sm text-slate-600">
+                  {user.assignedLocation
+                    ? `${user.assignedLocation.name} (${user.assignedLocation.code})`
+                    : "—"}
                 </td>
                 <td className="px-5 py-4 text-sm text-slate-600">
                   {getUserStatusLabel(user.isActive)}

@@ -29,9 +29,11 @@ function getTutorialSteps(role: Role) {
       title: `${getRoleLabel(role)} workflow tips`,
       description:
         role === "ADMIN"
-          ? "You can manage users, roles, and the highest-level system controls. Use the Users module to create Admin, System Manager, and Sales Staff accounts safely."
+          ? "You can manage users, roles, and the highest-level system controls. Use the Users module to create Admin, System Manager, Manager, and Sales Staff accounts safely."
           : role === "SYSTEM_MANAGER"
             ? "You can manage operational work and user accounts, but not Admin ownership. Use the Users module for System Manager and Sales Staff access."
+            : role === "MANAGER"
+              ? "Your work is scoped to your assigned branch. Use inventory, orders, and adjustment requests for day-to-day branch operations."
             : "You can work inside the modules available to your role, with restricted access to ownership-level settings and user management.",
     },
   ];

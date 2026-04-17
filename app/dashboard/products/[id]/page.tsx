@@ -1,13 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { archiveProductAction, restoreProductAction } from "@/lib/actions/products";
+import {
+  setLocationProductPriceAction,
+  deleteLocationProductPriceAction,
+} from "@/lib/actions/branch-pricing";
 import { requirePermission } from "@/lib/dal/auth";
 import { getProductById } from "@/lib/dal/products";
+import {
+  getBranchPricesForProduct,
+  getUnpricedBranchesForProduct,
+} from "@/lib/dal/branch-pricing";
 import { formatCurrency } from "@/lib/products";
 import { hasPermission } from "@/lib/permissions";
 import { formatDateMNL } from "@/lib/timezone";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProductStatusBadge } from "@/components/products/product-status-badge";
+import { BranchPricingSection } from "@/components/products/branch-pricing-section";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { DetailField } from "@/components/ui/detail-field";
@@ -19,13 +28,19 @@ type ProductDetailPageProps = {
 export default async function ProductDetailPage({ params }: ProductDetailPageProps) {
   const user = await requirePermission("products", "read");
   const { id } = await params;
-  const product = await getProductById(id);
+
+  const [product, existingPrices, unpricedBranches] = await Promise.all([
+    getProductById(id),
+    getBranchPricesForProduct(id, user),
+    getUnpricedBranchesForProduct(id, user),
+  ]);
 
   if (!product) {
     notFound();
   }
 
   const canManage = hasPermission(user.role, "products", "update");
+  const canManagePricing = hasPermission(user.role, "branch_pricing", "update");
   const productId = product.id;
   const returnTo = `/dashboard/products/${productId}`;
 
@@ -153,6 +168,19 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               </div>
             )}
           </div>
+
+          {/* Branch-level price overrides — visible to anyone with branch_pricing read */}
+          {hasPermission(user.role, "branch_pricing", "read") && (
+            <BranchPricingSection
+              productId={productId}
+              productGlobalPrice={product.unitPrice.toString()}
+              existingPrices={existingPrices}
+              unpricedBranches={unpricedBranches}
+              canManage={canManagePricing}
+              setAction={setLocationProductPriceAction}
+              deleteAction={deleteLocationProductPriceAction}
+            />
+          )}
         </div>
 
         <div className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm">

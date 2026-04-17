@@ -17,7 +17,7 @@ export type AuditLogRow = {
     firstName: string;
     lastName: string;
     email: string;
-    role: "ADMIN" | "SYSTEM_MANAGER" | "SALES_STAFF";
+    role: "ADMIN" | "SYSTEM_MANAGER" | "MANAGER" | "SALES_STAFF";
   };
 };
 

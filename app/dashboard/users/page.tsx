@@ -54,10 +54,10 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
           value={String(summary.systemManagers)}
         />
         <StatCard
-          description={`Sales Staff: ${summary.salesStaff}. Active accounts: ${summary.active}. Inactive accounts: ${summary.inactive}.`}
-          label="Sales Staff"
+          description={`Managers: ${summary.managers}. Sales Staff: ${summary.salesStaff}. Active accounts: ${summary.active}. Inactive accounts: ${summary.inactive}.`}
+          label="Branch Managers"
           tone="warning"
-          value={String(summary.salesStaff)}
+          value={String(summary.managers)}
         />
       </section>
 

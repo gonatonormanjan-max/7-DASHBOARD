@@ -12,7 +12,9 @@ export type PermissionResource =
   | "reports"
   | "users"
   | "audit_logs"
-  | "settings";
+  | "settings"
+  | "adjustment_requests"
+  | "branch_pricing";
 
 export type PermissionAction =
   | "create"
@@ -73,6 +75,8 @@ export const permissionMatrix: Record<
     users: ALL_ACTIONS,
     audit_logs: ALL_ACTIONS,
     settings: ALL_ACTIONS,
+    adjustment_requests: ALL_ACTIONS,
+    branch_pricing: ALL_ACTIONS,
   },
   SYSTEM_MANAGER: {
     dashboard: ALL_ACTIONS,
@@ -87,6 +91,27 @@ export const permissionMatrix: Record<
     users: ["create", "read", "update"],
     audit_logs: ["read"],
     settings: ["read", "create", "update"],
+    adjustment_requests: ["read"],
+    branch_pricing: ["read"],
+  },
+  // Branch-level operational role. All data access is scoped to the manager's
+  // assigned branch. Cannot manage users, settings, or execute direct stock
+  // mutations — manual adjustments require admin approval.
+  MANAGER: {
+    dashboard: ALL_ACTIONS,
+    products: ["read"],
+    categories: ["read"],
+    locations: ["read"],
+    inventory: ["read", "export"],
+    suppliers: ["read"],
+    purchase_orders: ["create", "read", "update"],
+    sales_orders: ["create", "read", "update"],
+    reports: ["read", "export"],
+    audit_logs: ["read"],
+    adjustment_requests: ["create", "read"],
+    // MANAGER can set prices for their own branch only.
+    // The server action enforces the branch-scope constraint.
+    branch_pricing: ["create", "read", "update", "delete"],
   },
   SALES_STAFF: {
     dashboard: ["read"],
@@ -216,6 +241,8 @@ export function getRoleLabel(role: Role) {
       return "Admin";
     case "SYSTEM_MANAGER":
       return "System Manager";
+    case "MANAGER":
+      return "Manager";
     case "SALES_STAFF":
       return "Sales Staff";
   }
@@ -227,6 +254,8 @@ export function getRoleDescription(role: Role) {
       return "";
     case "SYSTEM_MANAGER":
       return "Operational control with strong oversight and limited ownership settings.";
+    case "MANAGER":
+      return "Branch-level operational access. Data is scoped to the assigned branch. Stock adjustments require admin approval.";
     case "SALES_STAFF":
       return "Sales execution access with controlled stock effects through approved workflows.";
   }
