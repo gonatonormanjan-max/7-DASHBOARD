@@ -95,6 +95,8 @@ const revalidatePathMock = vi.hoisted(() => vi.fn());
 const logAuditMock = vi.hoisted(() => vi.fn(async () => undefined));
 const syncLocationCostSnapshotMock = vi.hoisted(() => vi.fn(async () => undefined));
 
+vi.mock("server-only", () => ({}));
+
 vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
 }));
