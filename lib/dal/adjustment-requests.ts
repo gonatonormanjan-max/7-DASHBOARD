@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AdjustmentRequestStatus } from "@prisma/client";
+import { AdjustmentRequestStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { CurrentUser } from "@/lib/dal/auth";
 import { getBranchScope } from "@/lib/dal/scope";
@@ -45,6 +45,42 @@ export type AdjustmentRequestRow = {
   reviewedBy: { id: string; firstName: string; lastName: string } | null;
 };
 
+function isMissingAdjustmentRequestStorageError(error: unknown) {
+  const errorLike = error as
+    | {
+        code?: unknown;
+        message?: unknown;
+        meta?: unknown;
+      }
+    | undefined;
+  const code = typeof errorLike?.code === "string" ? errorLike.code : "";
+  const message = typeof errorLike?.message === "string" ? errorLike.message : "";
+  const metaCode =
+    typeof errorLike?.meta === "object" &&
+    errorLike.meta !== null &&
+    "code" in errorLike.meta &&
+    typeof errorLike.meta.code === "string"
+      ? errorLike.meta.code
+      : "";
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError && code === "P2021") {
+    return true;
+  }
+
+  if (code === "42P01" || metaCode === "42P01") {
+    return true;
+  }
+
+  if (code === "P2010" && metaCode === "42P01") {
+    return true;
+  }
+
+  return (
+    message.includes('relation "AdjustmentRequest" does not exist') ||
+    message.includes('relation "adjustmentrequest" does not exist')
+  );
+}
+
 /**
  * Returns all adjustment requests visible to the given user.
  * - MANAGER: only requests for their own branch
@@ -63,20 +99,27 @@ export async function getAdjustmentRequests(
 
   const branchScope = getBranchScope(user);
 
-  const rows = await prisma.adjustmentRequest.findMany({
-    where: {
-      ...(branchScope ? { branchId: branchScope } : {}),
-      ...(statusFilter && statusFilter !== "all" ? { status: statusFilter } : {}),
-    },
-    select: adjustmentRequestSelect,
-    orderBy: [
-      // PENDING requests always surface first
-      { status: "asc" },
-      { requestedAt: "desc" },
-    ],
-  });
+  try {
+    const rows = await prisma.adjustmentRequest.findMany({
+      where: {
+        ...(branchScope ? { branchId: branchScope } : {}),
+        ...(statusFilter && statusFilter !== "all" ? { status: statusFilter } : {}),
+      },
+      select: adjustmentRequestSelect,
+      orderBy: [
+        // PENDING requests always surface first
+        { status: "asc" },
+        { requestedAt: "desc" },
+      ],
+    });
 
-  return rows as AdjustmentRequestRow[];
+    return rows as AdjustmentRequestRow[];
+  } catch (error) {
+    if (isMissingAdjustmentRequestStorageError(error)) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 /**
@@ -94,15 +137,22 @@ export async function getAdjustmentRequestById(
 
   const branchScope = getBranchScope(user);
 
-  const row = await prisma.adjustmentRequest.findFirst({
-    where: {
-      id,
-      ...(branchScope ? { branchId: branchScope } : {}),
-    },
-    select: adjustmentRequestSelect,
-  });
+  try {
+    const row = await prisma.adjustmentRequest.findFirst({
+      where: {
+        id,
+        ...(branchScope ? { branchId: branchScope } : {}),
+      },
+      select: adjustmentRequestSelect,
+    });
 
-  return (row as AdjustmentRequestRow | null) ?? null;
+    return (row as AdjustmentRequestRow | null) ?? null;
+  } catch (error) {
+    if (isMissingAdjustmentRequestStorageError(error)) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -124,10 +174,17 @@ export async function getPendingAdjustmentRequestCount(
 
   const branchScope = getBranchScope(user);
 
-  return prisma.adjustmentRequest.count({
-    where: {
-      status: AdjustmentRequestStatus.PENDING,
-      ...(branchScope ? { branchId: branchScope } : {}),
-    },
-  });
+  try {
+    return await prisma.adjustmentRequest.count({
+      where: {
+        status: AdjustmentRequestStatus.PENDING,
+        ...(branchScope ? { branchId: branchScope } : {}),
+      },
+    });
+  } catch (error) {
+    if (isMissingAdjustmentRequestStorageError(error)) {
+      return 0;
+    }
+    throw error;
+  }
 }
