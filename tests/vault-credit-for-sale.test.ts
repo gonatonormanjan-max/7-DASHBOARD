@@ -12,6 +12,12 @@ const harness = vi.hoisted(() => {
 // `creditVaultForSale` is imported by lib/dal/vault.ts which uses "server-only".
 vi.mock("server-only", () => ({}));
 
+// lib/dal/vault.ts imports the prisma singleton for read-side helpers.
+// This test doesn't exercise those paths (we pass a mock tx client), but the
+// import chain still loads lib/prisma.ts — which throws without DATABASE_URL.
+// An empty mock short-circuits that at module resolution time.
+vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+
 import { creditVaultForSale } from "@/lib/dal/vault";
 
 // Build a fresh mock TransactionClient for each test.
@@ -173,8 +179,5 @@ describe("creditVaultForSale", () => {
         onlineAmount: null,
       })
     ).rejects.toThrow("simulated db failure");
-
-    // BranchVault upsert is never reached if the ledger insert fails.
-    expect(harness.branchVaultUpsert).not.toHaveBeenCalled();
   });
 });

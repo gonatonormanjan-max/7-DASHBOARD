@@ -14,7 +14,8 @@ export type PermissionResource =
   | "audit_logs"
   | "settings"
   | "adjustment_requests"
-  | "branch_pricing";
+  | "branch_pricing"
+  | "vault";
 
 export type PermissionAction =
   | "create"
@@ -37,7 +38,8 @@ export type NavIcon =
   | "chart"
   | "users"
   | "shield"
-  | "settings";
+  | "settings"
+  | "wallet";
 
 export type NavItem = {
   title: string;
@@ -77,6 +79,7 @@ export const permissionMatrix: Record<
     settings: ALL_ACTIONS,
     adjustment_requests: ALL_ACTIONS,
     branch_pricing: ALL_ACTIONS,
+    vault: ALL_ACTIONS,
   },
   SYSTEM_MANAGER: {
     dashboard: ALL_ACTIONS,
@@ -93,6 +96,7 @@ export const permissionMatrix: Record<
     settings: ["read", "create", "update"],
     adjustment_requests: ["read"],
     branch_pricing: ["read"],
+    vault: ["read"],
   },
   // Branch-level operational role. All data access is scoped to the manager's
   // assigned branch. Cannot manage users, settings, or execute direct stock
@@ -112,6 +116,7 @@ export const permissionMatrix: Record<
     // MANAGER can set prices for their own branch only.
     // The server action enforces the branch-scope constraint.
     branch_pricing: ["create", "read", "update", "delete"],
+    vault: ["read"],
   },
   SALES_STAFF: {
     dashboard: ["read"],
@@ -194,6 +199,14 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "chart",
     section: "Management",
     resource: "reports",
+    action: "read",
+  },
+  {
+    title: "Branch Vault",
+    href: "/dashboard/vault",
+    icon: "wallet",
+    section: "Management",
+    resource: "vault",
     action: "read",
   },
   {

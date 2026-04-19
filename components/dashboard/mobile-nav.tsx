@@ -14,6 +14,7 @@ import {
   ShoppingCart,
   Truck,
   Users,
+  Wallet,
   Warehouse,
 } from "lucide-react";
 import type { NavIcon, NavItem } from "@/lib/permissions";
@@ -32,6 +33,7 @@ const iconMap: Record<NavIcon, typeof LayoutDashboard> = {
   users: Users,
   shield: ShieldCheck,
   settings: Settings,
+  wallet: Wallet,
 };
 
 type MobileBottomNavProps = {

@@ -19,6 +19,7 @@ import {
   ShoppingCart,
   Truck,
   Users,
+  Wallet,
   Warehouse,
 } from "lucide-react";
 import { signOutAction } from "@/lib/actions/auth";
@@ -67,6 +68,7 @@ const iconMap: Record<NavIcon, typeof LayoutDashboard> = {
   users: Users,
   shield: ShieldCheck,
   settings: Settings,
+  wallet: Wallet,
 };
 
 type DashboardSidebarProps = {
