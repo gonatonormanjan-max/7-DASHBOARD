@@ -18,7 +18,7 @@ import {
   syncLocationCostSnapshot,
 } from "@/lib/costing";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
-import { creditVaultForSale } from "@/lib/dal/vault";
+import { creditVaultForSale, reverseVaultForVoidedSale } from "@/lib/dal/vault";
 import { buildBranchPriceMap } from "@/lib/pricing";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
@@ -1732,6 +1732,19 @@ async function runVoidSalesOrderAction(input: {
       });
     }
 
+    // ── Reverse vault credits for this voided sale ─────────────────────
+    // Same $transaction as the order status change + stock return.
+    // Reads the original SALE ledger rows and writes matching VOID_REVERSAL
+    // rows with negative amounts. Balances may go negative by design —
+    // the reconciliation view (Phase 2H) will surface that.
+    // Legacy sales with no SALE ledger rows are a silent no-op.
+    await reverseVaultForVoidedSale(tx, {
+      orderId: input.orderId,
+      orderNumber: order.orderNumber,
+      performedById: user.id,
+      reason: reasonLabel,
+    });
+
     await logAudit(
       {
         userId: user.id,
@@ -1746,6 +1759,7 @@ async function runVoidSalesOrderAction(input: {
           voidRemarks: input.voidRemarks,
           voidDocumentation: input.voidDocumentation,
           stockReturned: true,
+          vaultDebited: true,
         },
       },
       tx
