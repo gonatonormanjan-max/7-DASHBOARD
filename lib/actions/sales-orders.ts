@@ -18,6 +18,7 @@ import {
   syncLocationCostSnapshot,
 } from "@/lib/costing";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
+import { creditVaultForSale } from "@/lib/dal/vault";
 import { buildBranchPriceMap } from "@/lib/pricing";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
@@ -1114,6 +1115,20 @@ export async function createSalesOrderAction(
           onHandQtySnapshot: nextOnHand,
         });
       }
+
+      // ── Credit the branch vault for money received ────────────────────
+      // Same $transaction as the order + items + stock decrement, so a
+      // vault-write failure rolls back the sale cleanly. Only direct-sale
+      // (non-draft) flow credits the vault today; DRAFT orders that later
+      // complete via status transitions are tracked in Task #11 (Phase 2B.1).
+      await creditVaultForSale(tx, {
+        branchId: defaultLocation.id,
+        orderId: createdOrder.id,
+        orderNumber: createdOrder.orderNumber,
+        cashAmount: resolvedCashAmount,
+        onlineAmount: resolvedOnlineAmount,
+        performedById: user.id,
+      });
     }
 
     await logAudit(
@@ -1133,6 +1148,7 @@ export async function createSalesOrderAction(
           paymentMode: paymentDetails.paymentMode,
           cashAmount: resolvedCashAmount?.toString() ?? null,
           onlineAmount: resolvedOnlineAmount?.toString() ?? null,
+          vaultCredited: intent !== "draft",
           estimatedCostLineCount: costedItems.filter((item) => item.isEstimatedCost).length,
           items: costedItems.map((item) => ({
             ...item,
