@@ -2,9 +2,9 @@ import "server-only";
 
 import { cache } from "react";
 import { LocationType, type Role } from "@prisma/client";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getToken } from "next-auth/jwt";
 import {
   hasPermission,
   type PermissionAction,
@@ -14,15 +14,39 @@ import { prisma } from "@/lib/prisma";
 
 export const SALES_STAFF_ACTIVE_LOCATION_COOKIE = "salesStaffActiveLocationId";
 
-export const getCurrentUser = cache(async () => {
-  const session = await auth();
+async function resolveSessionUserId() {
+  const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
 
-  if (!session?.user?.id) {
+  if (!authSecret) {
+    return null;
+  }
+
+  const requestHeaders = new Headers(await headers());
+  const secureCookie =
+    requestHeaders.get("x-forwarded-proto") === "https" ||
+    requestHeaders.get("origin")?.startsWith("https://") === true;
+  const token = await getToken({
+    req: { headers: requestHeaders },
+    secret: authSecret,
+    secureCookie,
+  });
+
+  if (typeof token?.id === "string") {
+    return token.id;
+  }
+
+  return typeof token?.sub === "string" ? token.sub : null;
+}
+
+export const getCurrentUser = cache(async () => {
+  const userId = await resolveSessionUserId();
+
+  if (!userId) {
     return null;
   }
 
   return prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: userId },
     select: {
       id: true,
       firstName: true,
