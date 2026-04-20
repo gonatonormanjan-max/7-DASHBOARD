@@ -237,5 +237,6 @@ describe("deliverSalesOrderAction concurrency guards", () => {
     expect(harness.reservedQty).toBe(0);
     expect(harness.reservedQty).toBeGreaterThanOrEqual(0);
     expect(harness.stockQty).toBe(0);
+    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/vault");
   });
 });

@@ -691,6 +691,7 @@ function revalidateSalesOrderPaths(options: {
     "/dashboard",
     "/dashboard/reports",
     "/dashboard/inventory",
+    "/dashboard/vault",
     "/dashboard/sales-orders",
     "/dashboard/sales-orders/archive",
   ]);
