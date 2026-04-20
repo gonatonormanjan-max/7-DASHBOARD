@@ -1,10 +1,9 @@
 import { getRoleLabel } from "@/lib/permissions";
-import { createUserAction } from "@/lib/actions/users";
 import { requirePermission } from "@/lib/dal/auth";
 import { getManagerBranchOptions } from "@/lib/dal/users";
 import { getAssignableRolesForActor } from "@/lib/users";
 import { PageHeader } from "@/components/ui/page-header";
-import { UserForm } from "@/components/users/user-form";
+import { CreateUserForm } from "@/components/users/create-user-form";
 
 export default async function NewUserPage() {
   const [user, branches] = await Promise.all([
@@ -28,12 +27,7 @@ export default async function NewUserPage() {
         description="Create a dashboard account and assign the right access level for that teammate."
       />
 
-      <UserForm
-        action={createUserAction}
-        locationOptions={locationOptions}
-        mode="create"
-        roleOptions={roleOptions}
-      />
+      <CreateUserForm locationOptions={locationOptions} roleOptions={roleOptions} />
     </div>
   );
 }

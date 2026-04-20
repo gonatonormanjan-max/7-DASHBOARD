@@ -2,11 +2,35 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import AuthLayout from "@/components/auth-layout";
 
+function resolveSignInErrorMessage(result: {
+  error?: string;
+  code?: string;
+  url?: string | null;
+}) {
+  const redirectUrl = result.url
+    ? new URL(result.url, window.location.origin)
+    : null;
+  const error = result.error ?? redirectUrl?.searchParams.get("error") ?? undefined;
+  const code = result.code ?? redirectUrl?.searchParams.get("code") ?? undefined;
+
+  if (code === "rate_limited") {
+    return "Too many login attempts. Please try again later.";
+  }
+
+  if (error === "CredentialsSignin" || error === "AccessDenied") {
+    return "Invalid email or password";
+  }
+
+  if (error === "CallbackRouteError" || error === "Configuration") {
+    return "Unable to sign in right now. Please try again.";
+  }
+
+  return null;
+}
+
 export default function LoginPage() {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -24,28 +48,24 @@ export default function LoginPage() {
         email,
         password,
         redirect: false,
+        redirectTo: "/dashboard",
       });
 
-      if (result?.code === "rate_limited") {
-        setError("Too many login attempts. Please try again later.");
+      const errorMessage = result
+        ? resolveSignInErrorMessage(result)
+        : "Unable to sign in right now. Please try again.";
+
+      if (errorMessage) {
+        setError(errorMessage);
         return;
       }
 
-      if (
-        result?.error === "CredentialsSignin" ||
-        result?.error === "AccessDenied" ||
-        result?.error === "CallbackRouteError"
-      ) {
-        setError("Invalid email or password");
-        return;
-      }
-
-      if (!result?.ok) {
+      if (!result?.ok || !result.url) {
         setError("Unable to sign in right now. Please try again.");
         return;
       }
 
-      router.push("/dashboard");
+      window.location.href = result.url;
     } catch (error) {
       console.error("Sign-in failed.", error);
       setError("Unable to sign in right now. Please try again.");
