@@ -447,6 +447,15 @@ export function SalesOrderFormRedesign({
     state,
   });
   const [saleWarehouseId, setSaleWarehouseId] = useState(initialWarehouseId);
+
+  // Map of productId → effective selling price for the currently selected branch.
+  // Initialised from the `products` prop (which already has branch overrides
+  // applied server-side when a branch is locked). Updated via a lightweight API
+  // call whenever the user changes the "selling from" branch, so the cart always
+  // reflects the correct branch-specific price before the order is saved.
+  const [branchPriceMap, setBranchPriceMap] = useState<Record<string, string>>(
+    () => Object.fromEntries(products.map((p) => [p.id, p.unitPrice]))
+  );
   const [customerMode, setCustomerMode] = useState<CustomerMode>(initialCustomerMode);
   const [customerName, setCustomerName] = useState(() => {
     if (prefill?.customerName) return prefill.customerName;
@@ -550,7 +559,7 @@ export function SalesOrderFormRedesign({
         productId: product.id,
         warehouseId: saleWarehouseId,
         quantity: 1,
-        unitPrice: normalizeMoney(product.unitPrice),
+        unitPrice: normalizeMoney(branchPriceMap[product.id] ?? product.unitPrice),
         priceOverridden: false,
         warehouseOverridden: false,
       },
@@ -641,7 +650,7 @@ export function SalesOrderFormRedesign({
     );
   }
 
-  function updateSaleWarehouse(warehouseId: string) {
+  async function updateSaleWarehouse(warehouseId: string) {
     setSaleWarehouseId(warehouseId);
 
     if (!warehouseId) {
@@ -651,11 +660,39 @@ export function SalesOrderFormRedesign({
       focusAddItemInput();
     }
 
+    // Fetch branch-specific price overrides for the newly selected branch so
+    // that both newly added items AND existing non-overridden cart items show
+    // the correct selling price. Falls back to global prices on any error.
+    let newPriceMap: Record<string, string> = {};
+    if (warehouseId) {
+      try {
+        const res = await fetch(
+          `/api/branch-prices?locationId=${encodeURIComponent(warehouseId)}`
+        );
+        if (res.ok) {
+          newPriceMap = await res.json() as Record<string, string>;
+        }
+      } catch {
+        // Network failure — silently fall back to global prices.
+      }
+    }
+    setBranchPriceMap(newPriceMap);
+
     setCart((current) =>
       mergeCartItems(
-        current.map((item) =>
-          item.warehouseOverridden ? item : { ...item, warehouseId }
-        ),
+        current.map((item) => {
+          if (item.warehouseOverridden) return item;
+          const product = productMap.get(item.productId);
+          const effectivePrice =
+            newPriceMap[item.productId] ?? product?.unitPrice ?? item.unitPrice;
+          return {
+            ...item,
+            warehouseId,
+            unitPrice: item.priceOverridden
+              ? item.unitPrice
+              : normalizeMoney(effectivePrice),
+          };
+        }),
         warehouseId,
         products
       )
