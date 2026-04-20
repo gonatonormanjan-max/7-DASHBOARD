@@ -18,7 +18,7 @@ import {
   syncLocationCostSnapshot,
 } from "@/lib/costing";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
-import { creditVaultForSale } from "@/lib/dal/vault";
+import { creditVaultForSale, reverseVaultForVoidedSale } from "@/lib/dal/vault";
 import { buildBranchPriceMap } from "@/lib/pricing";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
@@ -1731,6 +1731,14 @@ async function runVoidSalesOrderAction(input: {
         reason: `Void sale return (${reasonLabel})`,
       });
     }
+
+    // Reverse any prior vault credits in the same transaction as the void.
+    await reverseVaultForVoidedSale(tx, {
+      orderId: input.orderId,
+      orderNumber: order.orderNumber,
+      performedById: user.id,
+      reason: reasonLabel,
+    });
 
     await logAudit(
       {
