@@ -116,7 +116,8 @@ export const permissionMatrix: Record<
     // MANAGER can set prices for their own branch only.
     // The server action enforces the branch-scope constraint.
     branch_pricing: ["create", "read", "update", "delete"],
-    vault: ["read"],
+    // MANAGER can record cash drops (vault.create) from their assigned branch.
+    vault: ["read", "create"],
   },
   SALES_STAFF: {
     dashboard: ["read"],

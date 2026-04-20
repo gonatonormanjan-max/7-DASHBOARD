@@ -1,6 +1,11 @@
 import "server-only";
 
-import { Prisma, VaultPaymentMethod, VaultTransactionType } from "@prisma/client";
+import {
+  CashDropDestination,
+  Prisma,
+  VaultPaymentMethod,
+  VaultTransactionType,
+} from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { CurrentUser } from "@/lib/dal/auth";
 import { getBranchScope } from "@/lib/dal/scope";
@@ -194,6 +199,88 @@ export async function reverseVaultForVoidedSale(
 }
 
 // ---------------------------------------------------------------------------
+type CreateCashDropInput = {
+  branchId: string;
+  /** Must be positive — the amount of cash being removed from the branch. */
+  cashAmount: Prisma.Decimal;
+  destination: CashDropDestination;
+  /** Required when destination = OTHERS; stripped otherwise. */
+  destinationNote?: string | null;
+  notes?: string | null;
+  performedById: string;
+};
+
+/**
+ * Record a cash drop against a branch vault inside an existing $transaction.
+ *
+ * Behaviour:
+ *   - Acquires a row-level lock (SELECT … FOR UPDATE) on BranchVault before
+ *     reading the balance so concurrent drops at the same branch serialize
+ *     safely — no stale read can sneak through.
+ *   - Rejects if cashAmount exceeds the current cash balance (D7).
+ *   - Inserts one VaultTransaction (type = CASH_DROP, method = CASH, amount
+ *     stored as negative — a debit).
+ *   - Decrements BranchVault.cashBalance atomically with { decrement }.
+ *
+ * Returns the created VaultTransaction ID so the caller can attach it to an
+ * audit log entry inside the same transaction.
+ */
+export async function createCashDropInVault(
+  tx: Prisma.TransactionClient,
+  input: CreateCashDropInput
+): Promise<{ id: string }> {
+  if (!input.cashAmount.gt(0)) {
+    throw new Error("Cash drop amount must be greater than zero.");
+  }
+
+  // Lock the BranchVault row so concurrent drops at the same branch
+  // wait their turn rather than reading a stale balance simultaneously.
+  const rows = await tx.$queryRaw<{ cashBalance: string }[]>(
+    Prisma.sql`SELECT "cashBalance" FROM "BranchVault" WHERE "branchId" = ${input.branchId} FOR UPDATE`
+  );
+
+  if (rows.length === 0) {
+    throw new Error(
+      "No vault exists for this branch. Record a sale first to initialize the vault."
+    );
+  }
+
+  const currentBalance = new Prisma.Decimal(rows[0].cashBalance);
+
+  if (input.cashAmount.gt(currentBalance)) {
+    throw new Error(
+      `Drop amount (₱${input.cashAmount.toFixed(2)}) exceeds current cash balance (₱${currentBalance.toFixed(2)}).`
+    );
+  }
+
+  // Insert the immutable ledger row. Negative amount = debit from the vault.
+  const vaultTx = await tx.vaultTransaction.create({
+    data: {
+      branchId: input.branchId,
+      type: VaultTransactionType.CASH_DROP,
+      paymentMethod: VaultPaymentMethod.CASH,
+      amount: input.cashAmount.negated(),
+      cashDropDestination: input.destination,
+      // Only persist destinationNote when destination is OTHERS.
+      destinationNote:
+        input.destination === CashDropDestination.OTHERS
+          ? (input.destinationNote ?? null)
+          : null,
+      notes: input.notes ?? null,
+      performedById: input.performedById,
+    },
+    select: { id: true },
+  });
+
+  // Atomically decrement the running cash balance.
+  await tx.branchVault.update({
+    where: { branchId: input.branchId },
+    data: { cashBalance: { decrement: input.cashAmount } },
+  });
+
+  return vaultTx;
+}
+
 // Read helpers — used by the /dashboard/vault page.
 //
 // Defensive fallback: if the vault tables don't exist yet (fresh clone before

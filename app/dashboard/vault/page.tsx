@@ -13,6 +13,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Pagination } from "@/components/ui/pagination";
 import { VaultFiltersForm } from "@/components/vault/vault-filters";
 import { VaultLedgerTable } from "@/components/vault/ledger-table";
+import { CashDropModal } from "@/components/vault/cash-drop-modal";
 import { VaultTransactionType, VaultPaymentMethod } from "@prisma/client";
 
 type VaultPageProps = {
@@ -50,6 +51,10 @@ export default async function VaultPage({ searchParams }: VaultPageProps) {
 
   const canSwitchBranch =
     user.role === "ADMIN" || user.role === "SYSTEM_MANAGER";
+
+  // Only MANAGER and ADMIN can create cash drops.
+  // SYSTEM_MANAGER has vault: ["read"] only — no "create" permission.
+  const canCashDrop = user.role === "ADMIN" || user.role === "MANAGER";
 
   // Convert YYYY-MM-DD filter strings → UTC boundaries at Manila midnight.
   const dateFrom = filters.dateFrom ? businessDayStart(filters.dateFrom) : undefined;
@@ -98,11 +103,19 @@ export default async function VaultPage({ searchParams }: VaultPageProps) {
         title="Branch Vault"
         description="Running cash and online balances per branch, with the full append-only ledger of every credit and debit."
         action={
-          <div className="flex items-center gap-2 rounded-full border border-[#c5e7db] bg-[#edf8f4] px-3 py-1.5">
-            <Wallet className="size-4 text-[#11664b]" strokeWidth={2.2} />
-            <span className="text-xs font-semibold text-[#11664b] uppercase tracking-[0.18em]">
-              {selectedBranch.name}
-            </span>
+          <div className="flex items-center gap-3">
+            {canCashDrop ? (
+              <CashDropModal
+                branchId={selectedBranch.id}
+                branchName={selectedBranch.name}
+              />
+            ) : null}
+            <div className="flex items-center gap-2 rounded-full border border-[#c5e7db] bg-[#edf8f4] px-3 py-1.5">
+              <Wallet className="size-4 text-[#11664b]" strokeWidth={2.2} />
+              <span className="text-xs font-semibold text-[#11664b] uppercase tracking-[0.18em]">
+                {selectedBranch.name}
+              </span>
+            </div>
           </div>
         }
       />
