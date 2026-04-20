@@ -18,7 +18,11 @@ import {
   syncLocationCostSnapshot,
 } from "@/lib/costing";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
-import { creditVaultForSale, reverseVaultForVoidedSale } from "@/lib/dal/vault";
+import {
+  creditVaultForSale,
+  creditVaultForSaleIfNeeded,
+  reverseVaultForVoidedSale,
+} from "@/lib/dal/vault";
 import { buildBranchPriceMap } from "@/lib/pricing";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
@@ -344,6 +348,10 @@ async function loadOrderForStatusAction(orderId: string) {
       id: true,
       orderNumber: true,
       customerName: true,
+      locationId: true,
+      paymentMode: true,
+      cashAmount: true,
+      onlineAmount: true,
       status: true,
       items: {
         orderBy: [{ createdAt: "asc" }],
@@ -370,6 +378,13 @@ async function loadOrderForStatusAction(orderId: string) {
       },
     },
   });
+}
+
+function getVaultBranchIdForOrder(order: {
+  locationId?: string | null;
+  items: Array<{ locationId: string }>;
+}) {
+  return order.locationId ?? order.items[0]?.locationId ?? null;
 }
 
 function isOutsideSalesStaffScope(
@@ -1118,9 +1133,9 @@ export async function createSalesOrderAction(
 
       // ── Credit the branch vault for money received ────────────────────
       // Same $transaction as the order + items + stock decrement, so a
-      // vault-write failure rolls back the sale cleanly. Only direct-sale
-      // (non-draft) flow credits the vault today; DRAFT orders that later
-      // complete via status transitions are tracked in Task #11 (Phase 2B.1).
+      // vault-write failure rolls back the sale cleanly. Later workflow
+      // transitions may also backfill this credit when a draft sale reaches
+      // delivery/completion with captured payment data.
       await creditVaultForSale(tx, {
         branchId: defaultLocation.id,
         orderId: createdOrder.id,
@@ -1425,6 +1440,27 @@ async function runDeliverSalesOrderAction(orderId: string) {
         });
       }
 
+      const vaultBranchId = getVaultBranchIdForOrder(order);
+      const hasStoredPayment =
+        (order.cashAmount?.gt(0) ?? false) || (order.onlineAmount?.gt(0) ?? false);
+
+      if (hasStoredPayment && !vaultBranchId) {
+        throw new Error(
+          `Sales order ${orderId} has captured payment but no branch assigned for vault credit.`
+        );
+      }
+
+      const vaultCreditResult = vaultBranchId
+        ? await creditVaultForSaleIfNeeded(tx, {
+            branchId: vaultBranchId,
+            orderId,
+            orderNumber: order.orderNumber,
+            cashAmount: order.cashAmount,
+            onlineAmount: order.onlineAmount,
+            performedById: user.id,
+          })
+        : "no_payment";
+
       await logAudit(
         {
           userId: user.id,
@@ -1434,6 +1470,7 @@ async function runDeliverSalesOrderAction(orderId: string) {
           details: {
             orderNumber: order.orderNumber,
             itemCount: order.items.length,
+            vaultCreditResult,
           },
         },
         tx
@@ -1469,6 +1506,10 @@ async function runCompleteSalesOrderAction(orderId: string) {
     select: {
       id: true,
       orderNumber: true,
+      locationId: true,
+      paymentMode: true,
+      cashAmount: true,
+      onlineAmount: true,
       status: true,
       items: {
         select: {
@@ -1499,13 +1540,37 @@ async function runCompleteSalesOrderAction(orderId: string) {
       data: { status: "COMPLETED" },
     });
 
+    const vaultBranchId = getVaultBranchIdForOrder(order);
+    const hasStoredPayment =
+      (order.cashAmount?.gt(0) ?? false) || (order.onlineAmount?.gt(0) ?? false);
+
+    if (hasStoredPayment && !vaultBranchId) {
+      throw new Error(
+        `Sales order ${orderId} has captured payment but no branch assigned for vault credit.`
+      );
+    }
+
+    const vaultCreditResult = vaultBranchId
+      ? await creditVaultForSaleIfNeeded(tx, {
+          branchId: vaultBranchId,
+          orderId,
+          orderNumber: order.orderNumber,
+          cashAmount: order.cashAmount,
+          onlineAmount: order.onlineAmount,
+          performedById: user.id,
+        })
+      : "no_payment";
+
     await logAudit(
       {
         userId: user.id,
         action: "sales_order.complete",
         entity: "sales_order",
         entityId: orderId,
-        details: { orderNumber: order.orderNumber },
+        details: {
+          orderNumber: order.orderNumber,
+          vaultCreditResult,
+        },
       },
       tx
     );

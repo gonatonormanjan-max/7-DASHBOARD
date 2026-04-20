@@ -4,6 +4,7 @@ import { Prisma, VaultPaymentMethod, VaultTransactionType } from "@prisma/client
 // Hoisted mock handles for the transactional client we hand to creditVaultForSale.
 const harness = vi.hoisted(() => {
   return {
+    vaultTxCount: vi.fn(),
     vaultTxCreate: vi.fn(),
     branchVaultUpsert: vi.fn(),
   };
@@ -18,12 +19,15 @@ vi.mock("server-only", () => ({}));
 // An empty mock short-circuits that at module resolution time.
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 
-import { creditVaultForSale } from "@/lib/dal/vault";
+import { creditVaultForSale, creditVaultForSaleIfNeeded } from "@/lib/dal/vault";
 
 // Build a fresh mock TransactionClient for each test.
 function buildTx() {
   return {
-    vaultTransaction: { create: harness.vaultTxCreate },
+    vaultTransaction: {
+      count: harness.vaultTxCount,
+      create: harness.vaultTxCreate,
+    },
     branchVault: { upsert: harness.branchVaultUpsert },
   } as unknown as Prisma.TransactionClient;
 }
@@ -37,8 +41,10 @@ const baseInput = {
 
 describe("creditVaultForSale", () => {
   beforeEach(() => {
+    harness.vaultTxCount.mockReset();
     harness.vaultTxCreate.mockReset();
     harness.branchVaultUpsert.mockReset();
+    harness.vaultTxCount.mockResolvedValue(0);
     harness.vaultTxCreate.mockResolvedValue({});
     harness.branchVaultUpsert.mockResolvedValue({});
   });
@@ -179,5 +185,51 @@ describe("creditVaultForSale", () => {
         onlineAmount: null,
       })
     ).rejects.toThrow("simulated db failure");
+  });
+
+  it("credits when payment exists and the sale has not been credited yet", async () => {
+    const result = await creditVaultForSaleIfNeeded(buildTx(), {
+      ...baseInput,
+      cashAmount: new Prisma.Decimal(125),
+      onlineAmount: null,
+    });
+
+    expect(result).toBe("credited");
+    expect(harness.vaultTxCount).toHaveBeenCalledWith({
+      where: {
+        referenceType: "sales_order",
+        referenceId: "order-1",
+        type: VaultTransactionType.SALE,
+      },
+    });
+    expect(harness.vaultTxCreate).toHaveBeenCalledTimes(1);
+    expect(harness.branchVaultUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips when the sale already has SALE ledger rows", async () => {
+    harness.vaultTxCount.mockResolvedValueOnce(1);
+
+    const result = await creditVaultForSaleIfNeeded(buildTx(), {
+      ...baseInput,
+      cashAmount: new Prisma.Decimal(125),
+      onlineAmount: null,
+    });
+
+    expect(result).toBe("already_credited");
+    expect(harness.vaultTxCreate).not.toHaveBeenCalled();
+    expect(harness.branchVaultUpsert).not.toHaveBeenCalled();
+  });
+
+  it("skips without querying the ledger when no payment was captured", async () => {
+    const result = await creditVaultForSaleIfNeeded(buildTx(), {
+      ...baseInput,
+      cashAmount: null,
+      onlineAmount: null,
+    });
+
+    expect(result).toBe("no_payment");
+    expect(harness.vaultTxCount).not.toHaveBeenCalled();
+    expect(harness.vaultTxCreate).not.toHaveBeenCalled();
+    expect(harness.branchVaultUpsert).not.toHaveBeenCalled();
   });
 });

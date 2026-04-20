@@ -96,6 +96,44 @@ export async function creditVaultForSale(
   });
 }
 
+export type CreditVaultForSaleIfNeededResult =
+  | "credited"
+  | "already_credited"
+  | "no_payment";
+
+/**
+ * Credit a sale into the vault only when it has not already been credited.
+ *
+ * Used by later workflow transitions so orders that were not recorded directly
+ * can still create the expected SALE ledger rows without double-crediting.
+ */
+export async function creditVaultForSaleIfNeeded(
+  tx: Prisma.TransactionClient,
+  input: CreditVaultForSaleInput
+): Promise<CreditVaultForSaleIfNeededResult> {
+  const cashDelta = input.cashAmount ?? new Prisma.Decimal(0);
+  const onlineDelta = input.onlineAmount ?? new Prisma.Decimal(0);
+
+  if (!cashDelta.gt(0) && !onlineDelta.gt(0)) {
+    return "no_payment";
+  }
+
+  const existingCreditCount = await tx.vaultTransaction.count({
+    where: {
+      referenceType: "sales_order",
+      referenceId: input.orderId,
+      type: VaultTransactionType.SALE,
+    },
+  });
+
+  if (existingCreditCount > 0) {
+    return "already_credited";
+  }
+
+  await creditVaultForSale(tx, input);
+  return "credited";
+}
+
 type ReverseVaultForVoidedSaleInput = {
   orderId: string;
   orderNumber: string;
