@@ -281,6 +281,78 @@ export async function createCashDropInVault(
   return vaultTx;
 }
 
+// ---------------------------------------------------------------------------
+type CreateVaultAdjustmentInput = {
+  branchId: string;
+  paymentMethod: VaultPaymentMethod;
+  /**
+   * Signed amount: positive = credit (add to balance), negative = debit
+   * (subtract from balance). Zero is rejected.
+   */
+  signedAmount: Prisma.Decimal;
+  /** Mandatory — this is a contingency tool; the audit trail must explain why. */
+  notes: string;
+  performedById: string;
+};
+
+/**
+ * Record a manual balance adjustment against a branch vault inside an
+ * existing $transaction.
+ *
+ * Behaviour:
+ *   - Accepts positive (credit) or negative (debit) amounts.
+ *   - Uses branchVault.upsert so the first adjustment on a branch that has
+ *     never had a sale still creates a valid BranchVault row.
+ *   - Debit adjustments that would push a balance below zero are allowed —
+ *     this is a contingency tool for correcting discrepancies, not a POS
+ *     gate. The resulting negative balance is visible on the Vault page with
+ *     a "warning" tone (already wired in the page StatCard).
+ *   - Inserts one VaultTransaction (type = MANUAL_ADJUSTMENT, method = CASH
+ *     or ONLINE, amount = signed value stored as-is).
+ *
+ * Returns the created VaultTransaction ID for the caller's audit log entry.
+ */
+export async function createVaultAdjustmentInVault(
+  tx: Prisma.TransactionClient,
+  input: CreateVaultAdjustmentInput
+): Promise<{ id: string }> {
+  if (input.signedAmount.eq(0)) {
+    throw new Error("Adjustment amount cannot be zero.");
+  }
+
+  const isCash = input.paymentMethod === VaultPaymentMethod.CASH;
+
+  // Insert the immutable ledger row. Amount is stored as-is (positive or
+  // negative), so the ledger clearly shows additions vs. deductions.
+  const vaultTx = await tx.vaultTransaction.create({
+    data: {
+      branchId: input.branchId,
+      type: VaultTransactionType.MANUAL_ADJUSTMENT,
+      paymentMethod: input.paymentMethod,
+      amount: input.signedAmount,
+      notes: input.notes,
+      performedById: input.performedById,
+    },
+    select: { id: true },
+  });
+
+  // Upsert the running balance with { increment: signedAmount }.
+  // Prisma's { increment } works for both positive and negative values.
+  await tx.branchVault.upsert({
+    where: { branchId: input.branchId },
+    create: {
+      branchId: input.branchId,
+      cashBalance: isCash ? input.signedAmount : new Prisma.Decimal(0),
+      onlineBalance: isCash ? new Prisma.Decimal(0) : input.signedAmount,
+    },
+    update: isCash
+      ? { cashBalance: { increment: input.signedAmount } }
+      : { onlineBalance: { increment: input.signedAmount } },
+  });
+
+  return vaultTx;
+}
+
 // Read helpers — used by the /dashboard/vault page.
 //
 // Defensive fallback: if the vault tables don't exist yet (fresh clone before

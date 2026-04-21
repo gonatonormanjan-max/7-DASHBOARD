@@ -3,35 +3,34 @@
 import { useActionState, useEffect, useEffectEvent, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  createCashDropAction,
+  createVaultAdjustmentAction,
   initialVaultFormState,
 } from "@/lib/actions/vault";
 import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 
-const DESTINATIONS = [
-  { value: "SAFE", label: "Safe" },
-  { value: "BANK_DEPOSIT", label: "Bank deposit" },
-  { value: "HANDED_TO_ADMIN", label: "Handed to admin" },
-  { value: "OTHERS", label: "Others (specify)" },
+const METHODS = [
+  { value: "CASH", label: "Cash" },
+  { value: "ONLINE", label: "Online" },
 ] as const;
 
-type CashDropModalProps = {
+type VaultAdjustmentModalProps = {
   branchId: string;
   branchName: string;
 };
 
-export function CashDropModal({ branchId, branchName }: CashDropModalProps) {
+export function VaultAdjustmentModal({
+  branchId,
+  branchName,
+}: VaultAdjustmentModalProps) {
   const [open, setOpen] = useState(false);
-  const [destination, setDestination] = useState<string>("SAFE");
   const [state, formAction] = useActionState(
-    createCashDropAction,
+    createVaultAdjustmentAction,
     initialVaultFormState
   );
 
   const handleSuccess = useEffectEvent(() => {
     setOpen(false);
-    setDestination("SAFE");
   });
 
   useEffect(() => {
@@ -46,11 +45,14 @@ export function CashDropModal({ branchId, branchName }: CashDropModalProps) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-              Cash drop
+              Vault adjustment
             </p>
             <h2 className="mt-2 text-xl font-semibold text-slate-950">
-              Record cash drop — {branchName}
+              Adjust balance — {branchName}
             </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Use a positive amount to add funds, negative to deduct.
+            </p>
           </div>
           <Button onClick={() => setOpen(false)} type="button" variant="ghost">
             Close
@@ -66,84 +68,62 @@ export function CashDropModal({ branchId, branchName }: CashDropModalProps) {
             </div>
           ) : null}
 
-          {/* Cash amount */}
+          {/* Payment method */}
           <label className="block space-y-2">
             <span className="text-sm font-medium text-slate-700">
-              Amount (₱)
+              Balance to adjust
+            </span>
+            <select
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+              name="paymentMethod"
+              defaultValue="CASH"
+            >
+              {METHODS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            {state.fieldErrors?.paymentMethod ? (
+              <p className="text-sm text-destructive">
+                {state.fieldErrors.paymentMethod[0]}
+              </p>
+            ) : null}
+          </label>
+
+          {/* Signed amount */}
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700">
+              Amount (₱){" "}
+              <span className="text-xs font-normal text-slate-400">
+                positive to add · negative to deduct
+              </span>
             </span>
             <input
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
-              min="0.01"
-              name="cashAmount"
-              placeholder="0.00"
+              name="adjustmentAmount"
+              placeholder="e.g. 500.00 or -200.00"
               required
               step="0.01"
               type="number"
             />
-            {state.fieldErrors?.cashAmount ? (
+            {state.fieldErrors?.adjustmentAmount ? (
               <p className="text-sm text-destructive">
-                {state.fieldErrors.cashAmount[0]}
+                {state.fieldErrors.adjustmentAmount[0]}
               </p>
             ) : null}
           </label>
 
-          {/* Destination */}
+          {/* Notes — mandatory for adjustments */}
           <label className="block space-y-2">
             <span className="text-sm font-medium text-slate-700">
-              Destination
-            </span>
-            <select
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
-              name="destination"
-              onChange={(e) => setDestination(e.target.value)}
-              value={destination}
-            >
-              {DESTINATIONS.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-            {state.fieldErrors?.destination ? (
-              <p className="text-sm text-destructive">
-                {state.fieldErrors.destination[0]}
-              </p>
-            ) : null}
-          </label>
-
-          {/* Destination note — shown only when OTHERS is selected */}
-          {destination === "OTHERS" ? (
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-700">
-                Describe the destination{" "}
-                <span className="text-destructive">*</span>
-              </span>
-              <textarea
-                className="min-h-20 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
-                name="destinationNote"
-                placeholder="Where did this cash go?"
-                required
-              />
-              {state.fieldErrors?.destinationNote ? (
-                <p className="text-sm text-destructive">
-                  {state.fieldErrors.destinationNote[0]}
-                </p>
-              ) : null}
-            </label>
-          ) : null}
-
-          {/* Notes — always optional */}
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">
-              Notes{" "}
-              <span className="text-xs font-normal text-slate-400">
-                (optional)
-              </span>
+              Reason <span className="text-destructive">*</span>
             </span>
             <textarea
-              className="min-h-20 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+              className="min-h-24 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
               name="notes"
-              placeholder="Additional context about this cash drop."
+              placeholder="Explain why this adjustment is needed (required)."
+              required
             />
             {state.fieldErrors?.notes ? (
               <p className="text-sm text-destructive">
@@ -160,8 +140,8 @@ export function CashDropModal({ branchId, branchName }: CashDropModalProps) {
             >
               Cancel
             </Button>
-            <SubmitButton pendingLabel="Recording...">
-              Record cash drop
+            <SubmitButton pendingLabel="Saving...">
+              Save adjustment
             </SubmitButton>
           </div>
         </form>
@@ -178,7 +158,7 @@ export function CashDropModal({ branchId, branchName }: CashDropModalProps) {
         type="button"
         variant="outline"
       >
-        Cash Drop
+        Adjust Balance
       </Button>
       {modal && typeof document !== "undefined"
         ? createPortal(modal, document.body)
