@@ -2,10 +2,8 @@
 
 import { useActionState, useEffect, useEffectEvent, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  createVaultAdjustmentAction,
-  initialVaultFormState,
-} from "@/lib/actions/vault";
+import { createVaultAdjustmentAction } from "@/lib/actions/vault";
+import { initialVaultFormState } from "@/lib/actions/vault-types";
 import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 

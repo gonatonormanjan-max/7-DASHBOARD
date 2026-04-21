@@ -8,20 +8,7 @@ import { getCurrentUser } from "@/lib/dal/auth";
 import { hasPermission } from "@/lib/permissions";
 import { createCashDropInVault, createVaultAdjustmentInVault } from "@/lib/dal/vault";
 import { prisma } from "@/lib/prisma";
-
-// ---------------------------------------------------------------------------
-// Shared form-state type
-// ---------------------------------------------------------------------------
-
-export type VaultFormState = {
-  status: "idle" | "error" | "success";
-  message?: string;
-  fieldErrors?: Record<string, string[] | undefined>;
-};
-
-export const initialVaultFormState: VaultFormState = {
-  status: "idle",
-};
+import type { VaultFormState } from "@/lib/actions/vault-types";
 
 // ---------------------------------------------------------------------------
 // createCashDropAction
