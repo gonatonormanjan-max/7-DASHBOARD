@@ -59,6 +59,8 @@ enum MovementType {
   MANUAL_ADJUSTMENT
   TRANSFER_OUT
   TRANSFER_IN
+  DISMANTLE_OUT
+  DISMANTLE_IN
   CUSTOMER_RETURN
   DAMAGED_LOST
   INITIAL_STOCK
@@ -68,6 +70,22 @@ enum AdjustmentRequestStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum StockCountType {
+  OPENING
+  CLOSING
+}
+
+enum StockCountStatus {
+  DRAFT
+  SUBMITTED
+}
+
+enum IssueReportStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
 }
 
 enum VaultTransactionType {
@@ -91,27 +109,33 @@ enum CashDropDestination {
 }
 
 model User {
-  id                         String               @id @default(uuid())
+  id                         String                 @id @default(uuid())
   firstName                  String
   lastName                   String
-  email                      String               @unique
+  email                      String                 @unique
   hashedPassword             String
-  role                       Role                 @default(SALES_STAFF)
-  isActive                   Boolean              @default(true)
+  role                       Role                   @default(SALES_STAFF)
+  isActive                   Boolean                @default(true)
   assignedLocationId         String?
-  createdAt                  DateTime             @default(now())
-  updatedAt                  DateTime             @updatedAt
-  assignedLocation           StockLocation?       @relation(fields: [assignedLocationId], references: [id], onDelete: SetNull)
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+  assignedLocation           StockLocation?         @relation(fields: [assignedLocationId], references: [id], onDelete: SetNull)
   accounts                   Account[]
-  createdPurchaseOrders      PurchaseOrder[]      @relation("PurchaseOrderCreatedBy")
-  approvedPurchaseOrders     PurchaseOrder[]      @relation("PurchaseOrderApprovedBy")
-  createdSalesOrders         SalesOrder[]         @relation("SalesOrderCreatedBy")
-  voidedSalesOrders          SalesOrder[]         @relation("SalesOrderVoidedBy")
+  createdPurchaseOrders      PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
+  approvedPurchaseOrders     PurchaseOrder[]        @relation("PurchaseOrderApprovedBy")
+  createdSalesOrders         SalesOrder[]           @relation("SalesOrderCreatedBy")
+  voidedSalesOrders          SalesOrder[]           @relation("SalesOrderVoidedBy")
   inventoryMovements         InventoryMovement[]
   auditLogs                  AuditLog[]
   productCostHistory         ProductCostHistory[]
-  adjustmentRequestsMade     AdjustmentRequest[]  @relation("AdjustmentRequestedBy")
-  adjustmentRequestsReviewed AdjustmentRequest[]  @relation("AdjustmentReviewedBy")
+  adjustmentRequestsMade     AdjustmentRequest[]    @relation("AdjustmentRequestedBy")
+  adjustmentRequestsReviewed AdjustmentRequest[]    @relation("AdjustmentReviewedBy")
+  dismantleRecords           DismantleRecord[]
+  stockCounts                StockCount[]
+  issueReportsSubmitted      IssueReport[]          @relation("IssueSubmittedBy")
+  issueReportsAcknowledged   IssueReport[]          @relation("IssueAcknowledgedBy")
+  issueReportsResolved       IssueReport[]          @relation("IssueResolvedBy")
+  changeFundAllocations      ChangeFundAllocation[]
   vaultTransactions          VaultTransaction[]
 }
 
@@ -207,6 +231,10 @@ model Product {
   salesItems         SalesOrderItem[]
   movements          InventoryMovement[]
   adjustmentRequests AdjustmentRequest[]
+  kitComponents      ProductKitComponent[]  @relation("KitComponents")
+  usedInKits         ProductKitComponent[]  @relation("UsedInKits")
+  dismantleRecords   DismantleRecord[]
+  stockCountLines    StockCountLine[]
 
   @@index([name])
   @@index([categoryId])
@@ -214,29 +242,45 @@ model Product {
   @@index([status])
 }
 
+model ProductKitComponent {
+  id                 String  @id @default(uuid())
+  kitProductId       String
+  componentProductId String
+  componentQty       Int     @default(1)
+  kitProduct         Product @relation("KitComponents", fields: [kitProductId], references: [id], onDelete: Cascade)
+  componentProduct   Product @relation("UsedInKits", fields: [componentProductId], references: [id], onDelete: Restrict)
+
+  @@unique([kitProductId, componentProductId])
+  @@index([componentProductId])
+}
+
 model StockLocation {
-  id                 String                 @id @default(uuid())
-  name               String                 @unique
-  code               String                 @unique
-  type               LocationType
-  address            String?
-  managerName        String?
-  contactNumber      String?
-  isActive           Boolean                @default(true)
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
-  assignedUsers      User[]
-  stock              LocationStock[]
-  productCosts       LocationProductCost[]
-  costHistory        ProductCostHistory[]
-  quotaSetting       BranchQuotaSetting?
-  salesOrders        SalesOrder[]           @relation("SalesOrderLocation")
-  salesItems         SalesOrderItem[]
-  movements          InventoryMovement[]
-  adjustmentRequests AdjustmentRequest[]
-  locationPrices     LocationProductPrice[]
-  vault              BranchVault?
-  vaultTransactions  VaultTransaction[]
+  id                   String                 @id @default(uuid())
+  name                 String                 @unique
+  code                 String                 @unique
+  type                 LocationType
+  address              String?
+  managerName          String?
+  contactNumber        String?
+  isActive             Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  assignedUsers        User[]
+  stock                LocationStock[]
+  productCosts         LocationProductCost[]
+  costHistory          ProductCostHistory[]
+  quotaSetting         BranchQuotaSetting?
+  salesOrders          SalesOrder[]           @relation("SalesOrderLocation")
+  salesItems           SalesOrderItem[]
+  movements            InventoryMovement[]
+  adjustmentRequests   AdjustmentRequest[]
+  dismantleRecords     DismantleRecord[]
+  stockCounts          StockCount[]
+  issueReports         IssueReport[]
+  changeFundAllocation ChangeFundAllocation?
+  locationPrices       LocationProductPrice[]
+  vault                BranchVault?
+  vaultTransactions    VaultTransaction[]
 }
 
 model BranchQuotaSetting {
@@ -285,6 +329,22 @@ model LocationStock {
   @@index([productId])
 }
 
+model DismantleRecord {
+  id             String        @id @default(uuid())
+  locationId     String
+  kitProductId   String
+  qty            Int
+  notes          String?
+  dismantledById String
+  createdAt      DateTime      @default(now())
+  location       StockLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  kitProduct     Product       @relation(fields: [kitProductId], references: [id], onDelete: Restrict)
+  dismantledBy   User          @relation(fields: [dismantledById], references: [id], onDelete: Restrict)
+
+  @@index([locationId])
+  @@index([kitProductId])
+}
+
 model AdjustmentRequest {
   id            String                  @id @default(uuid())
   branchId      String
@@ -308,6 +368,68 @@ model AdjustmentRequest {
   @@index([productId])
   @@index([requestedById])
   @@index([status])
+}
+
+model StockCount {
+  id            String           @id @default(uuid())
+  locationId    String
+  type          StockCountType
+  countDate     DateTime         @db.Date
+  status        StockCountStatus @default(DRAFT)
+  submittedById String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  location      StockLocation    @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  submittedBy   User             @relation(fields: [submittedById], references: [id], onDelete: Restrict)
+  lines         StockCountLine[]
+
+  @@unique([locationId, type, countDate])
+  @@index([locationId])
+}
+
+model StockCountLine {
+  id           String     @id @default(uuid())
+  stockCountId String
+  productId    String
+  systemQty    Int
+  countedQty   Int
+  notes        String?
+  stockCount   StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([stockCountId, productId])
+  @@index([productId])
+}
+
+model IssueReport {
+  id               String            @id @default(uuid())
+  branchId         String
+  title            String
+  body             String
+  status           IssueReportStatus @default(OPEN)
+  submittedById    String
+  acknowledgedById String?
+  resolvedById     String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  branch           StockLocation     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  submittedBy      User              @relation("IssueSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  acknowledgedBy   User?             @relation("IssueAcknowledgedBy", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  resolvedBy       User?             @relation("IssueResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([branchId])
+  @@index([status])
+}
+
+model ChangeFundAllocation {
+  id        String        @id @default(uuid())
+  branchId  String        @unique
+  amount    Decimal       @db.Decimal(12, 2)
+  setById   String
+  notes     String?
+  updatedAt DateTime      @updatedAt
+  branch    StockLocation @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  setBy     User          @relation(fields: [setById], references: [id], onDelete: Restrict)
 }
 
 model LocationProductCost {

@@ -6,7 +6,9 @@ import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
 import { getDashboardData } from "@/lib/dal/dashboard";
 import { getPendingAdjustmentRequestCount } from "@/lib/dal/adjustment-requests";
+import { getDiscrepancySummary } from "@/lib/dal/daily-ops";
 import { hasPermission, type PermissionResource } from "@/lib/permissions";
+import { getTodayBusinessDateInput } from "@/lib/validators/daily-ops";
 
 const roleCopy = {
   ADMIN: {
@@ -60,6 +62,13 @@ const moduleLinks: Array<{
     description: "View live stock by location, record movements, and adjust counts.",
     href: "/dashboard/inventory",
     resource: "inventory",
+    action: "read",
+  },
+  {
+    title: "Daily Operations",
+    description: "Run stock counts, issue reporting, and branch change fund tracking.",
+    href: "/dashboard/daily-ops",
+    resource: "daily_ops",
     action: "read",
   },
   {
@@ -169,6 +178,16 @@ export default async function DashboardPage() {
       ? getPendingAdjustmentRequestCount(user)
       : Promise.resolve(0),
   ]);
+  const discrepancySummary =
+    user.role === "ADMIN" && hasPermission(user.role, "daily_ops", "read")
+      ? await getDiscrepancySummary(user)
+      : [];
+  const todayBusinessDate = getTodayBusinessDateInput();
+  const todayDiscrepancyBranchCount = new Set(
+    discrepancySummary
+      .filter((item) => item.countDate.toISOString().slice(0, 10) === todayBusinessDate)
+      .map((item) => item.location.id)
+  ).size;
   const revenueToday = currencyFormatter.format(dashboardData.revenueToday);
   const warehouses = dashboardData.locationHealth.filter(
     (location) => location.type === "WAREHOUSE"
@@ -261,6 +280,19 @@ export default async function DashboardPage() {
           </>
         )}
       </section>
+
+      {todayDiscrepancyBranchCount > 0 && (
+        <Link
+          className="block rounded-lg border border-warning/40 bg-warning/5 px-4 py-4 transition hover:border-warning/60"
+          href="/dashboard/daily-ops"
+        >
+          <p className="text-sm font-medium text-warning">
+            {todayDiscrepancyBranchCount === 1
+              ? "1 branch has stock discrepancies today."
+              : `${todayDiscrepancyBranchCount} branches have stock discrepancies today.`}
+          </p>
+        </Link>
+      )}
 
       <section className="space-y-4">
         <div>

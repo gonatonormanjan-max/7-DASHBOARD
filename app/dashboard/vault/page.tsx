@@ -1,6 +1,7 @@
 import { Wallet } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/dal/auth";
+import { getChangeFundAllocation } from "@/lib/dal/daily-ops";
 import {
   getAccessibleVaultBranches,
   getBranchVaultBalance,
@@ -70,7 +71,7 @@ export default async function VaultPage({ searchParams }: VaultPageProps) {
       ? (filters.method as VaultPaymentMethod)
       : undefined;
 
-  const [balance, ledger] = await Promise.all([
+  const [balance, ledger, changeFundAllocation] = await Promise.all([
     getBranchVaultBalance(selectedBranch.id),
     getVaultLedger({
       branchId: selectedBranch.id,
@@ -81,6 +82,7 @@ export default async function VaultPage({ searchParams }: VaultPageProps) {
       page: filters.page,
       pageSize: filters.pageSize,
     }),
+    getChangeFundAllocation(selectedBranch.id),
   ]);
 
   const lastUpdatedText = balance.lastUpdatedAt
@@ -128,14 +130,22 @@ export default async function VaultPage({ searchParams }: VaultPageProps) {
       />
 
       <section className="grid gap-4 md:grid-cols-2">
-        <StatCard
-          label="Cash balance"
-          value={formatPHP(balance.cashBalance)}
-          description={lastUpdatedText}
-          tone={
-            Number(balance.cashBalance.toString()) < 0 ? "warning" : "primary"
-          }
-        />
+        <div className="space-y-3">
+          <StatCard
+            label="Cash balance"
+            value={formatPHP(balance.cashBalance)}
+            description={lastUpdatedText}
+            tone={
+              Number(balance.cashBalance.toString()) < 0 ? "warning" : "primary"
+            }
+          />
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Reserved for change tomorrow:{" "}
+            <strong className="text-slate-900">
+              {formatPHP(changeFundAllocation?.amount ?? 0)}
+            </strong>
+          </div>
+        </div>
         <StatCard
           label="Online balance"
           value={formatPHP(balance.onlineBalance)}

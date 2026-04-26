@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import AuthLayout from "@/components/auth-layout";
@@ -77,10 +78,13 @@ export default function LoginPage() {
   return (
     <AuthLayout>
       <div className="mb-6 flex justify-center">
-        <img
+        <Image
           src="/dispoz-logo.png"
           alt="Dispoz Vape Lounge"
           className="h-[336px] w-[336px] object-contain"
+          height={336}
+          priority
+          width={336}
         />
       </div>
       <h2 className="text-2xl font-semibold text-zinc-900">Welcome back</h2>
