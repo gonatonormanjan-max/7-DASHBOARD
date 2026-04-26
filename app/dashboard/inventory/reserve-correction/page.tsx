@@ -8,16 +8,48 @@ import { SubmitButton } from "@/components/ui/submit-button";
 
 const RESERVE_CORRECTION_PATH = "/dashboard/inventory/reserve-correction";
 
-export default async function ReserveCorrectionPage() {
+function firstString(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+type ReserveCorrectionPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function ReserveCorrectionPage({
+  searchParams,
+}: ReserveCorrectionPageProps) {
   const user = await requirePermission("inventory", "update");
 
-  if (user.role !== "ADMIN") {
+  if (user.role !== "ADMIN" && user.role !== "SYSTEM_MANAGER") {
     redirect("/dashboard");
   }
 
+  const rawSearchParams = await searchParams;
+  const locationFilter = firstString(rawSearchParams.locationId)?.trim() ?? "";
+  const query = firstString(rawSearchParams.query)?.trim().toLowerCase() ?? "";
+
   const rows = await getReserveCorrectionRows();
-  const ghostRowCount = rows.filter((row) => row.ghostQty > 0).length;
-  const totalGhostQty = rows.reduce((sum, row) => sum + row.ghostQty, 0);
+  const locationOptions = [...new Map(rows.map((row) => [row.locationId, row.locationName])).entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const filteredRows = rows.filter((row) => {
+    if (locationFilter && row.locationId !== locationFilter) {
+      return false;
+    }
+
+    if (!query) {
+      return true;
+    }
+
+    const haystack = [row.locationName, row.productName, row.sku]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(query);
+  });
+
+  const ghostRowCount = filteredRows.filter((row) => row.ghostQty > 0).length;
+  const totalGhostQty = filteredRows.reduce((sum, row) => sum + row.ghostQty, 0);
 
   return (
     <div className="space-y-8">
@@ -37,8 +69,8 @@ export default async function ReserveCorrectionPage() {
 
       <section className="rounded-lg border border-border bg-card p-4 text-sm text-slate-600 shadow-sm sm:p-5">
         <p>
-          Showing <strong>{rows.length.toLocaleString("en-US")}</strong> location-stock row
-          {rows.length === 1 ? "" : "s"} with non-zero reserved quantity.
+          Showing <strong>{filteredRows.length.toLocaleString("en-US")}</strong> location-stock
+          row{filteredRows.length === 1 ? "" : "s"} with non-zero reserved quantity.
         </p>
         <p className="mt-1">
           <strong>{ghostRowCount.toLocaleString("en-US")}</strong> row
@@ -47,11 +79,66 @@ export default async function ReserveCorrectionPage() {
         </p>
       </section>
 
+      <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
+        <form action={RESERVE_CORRECTION_PATH} className="grid gap-4 md:grid-cols-[1fr_220px_auto]">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Search product or SKU</span>
+            <input
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
+              defaultValue={query}
+              name="query"
+              placeholder="Search by product, SKU, or branch"
+              type="search"
+            />
+          </label>
+
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Branch</span>
+            <select
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring/30"
+              defaultValue={locationFilter}
+              name="locationId"
+            >
+              <option value="">All branches</option>
+              {locationOptions.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="flex items-end gap-2">
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              type="submit"
+            >
+              Apply filters
+            </button>
+            {(query || locationFilter) && (
+              <Link
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                href={RESERVE_CORRECTION_PATH}
+              >
+                Clear
+              </Link>
+            )}
+          </div>
+        </form>
+      </section>
+
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-card px-6 py-16 text-center">
           <h2 className="text-lg font-semibold text-slate-900">No reserved stock to review</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
             Every location-stock row currently has zero reserved quantity.
+          </p>
+        </div>
+      ) : filteredRows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-300 bg-card px-6 py-16 text-center">
+          <h2 className="text-lg font-semibold text-slate-900">No matching rows found</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Adjust the filters to find the location-stock rows you want to correct.
           </p>
         </div>
       ) : (
@@ -72,7 +159,7 @@ export default async function ReserveCorrectionPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
-                {rows.map((row) => {
+                {filteredRows.map((row) => {
                   const varianceClass =
                     row.variance > 0
                       ? "text-red-700"
@@ -126,6 +213,8 @@ export default async function ReserveCorrectionPage() {
                             className="mt-3 w-72 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
                           >
                             <input name="locationStockId" type="hidden" value={row.id} />
+                            <input name="locationId" type="hidden" value={row.locationId} />
+                            <input name="productId" type="hidden" value={row.productId} />
                             <input
                               name="returnTo"
                               type="hidden"

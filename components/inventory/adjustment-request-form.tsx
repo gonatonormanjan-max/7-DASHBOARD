@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
   submitAdjustmentRequestAction,
@@ -230,12 +231,12 @@ export function AdjustmentRequestForm({
 
       {/* Submit */}
       <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
-        <a
+        <Link
           href="/dashboard/inventory/adjustment-requests"
           className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-muted transition"
         >
           Cancel
-        </a>
+        </Link>
         <SubmitButton pendingLabel="Submitting…">
           Submit for Approval
         </SubmitButton>

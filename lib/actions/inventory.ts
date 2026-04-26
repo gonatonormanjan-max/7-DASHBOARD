@@ -1157,17 +1157,19 @@ export async function bulkStockSetupAction(
 
 export async function correctReservedQtyAction(formData: FormData) {
   const user = await requirePermission("inventory", "update");
-  if (user.role !== "ADMIN") {
+  if (user.role !== "ADMIN" && user.role !== "SYSTEM_MANAGER") {
     redirect("/dashboard");
   }
 
   const reserveCorrectionPath = "/dashboard/inventory/reserve-correction";
   const returnTo = resolveInventoryReturnTo(formData, reserveCorrectionPath);
   const locationStockId = String(formData.get("locationStockId") ?? "").trim();
+  const locationId = String(formData.get("locationId") ?? "").trim();
+  const productId = String(formData.get("productId") ?? "").trim();
   const reason = String(formData.get("reason") ?? "").trim();
   const newReservedQty = parseWholeNumber(formData.get("newReservedQty"));
 
-  if (!locationStockId) {
+  if (!locationStockId && (!locationId || !productId)) {
     redirect(
       withFlashMessage(returnTo, {
         error: "Location stock record is missing.",
@@ -1199,19 +1201,39 @@ export async function correctReservedQtyAction(formData: FormData) {
     );
   }
 
-  const result = await prisma.$transaction(async (tx) => {
-    const stock = await tx.locationStock.findUnique({
-      where: {
-        id: locationStockId,
-      },
-      select: {
-        id: true,
-        locationId: true,
-        productId: true,
-        quantity: true,
-        reservedQty: true,
-      },
-    });
+  const result = await withInventoryTransactionRetry(async (tx) => {
+    let stock: LockedLocationStock & {
+      locationId: string;
+      productId: string;
+    } | null = null;
+
+    if (locationId && productId) {
+      const lockedStock = await lockLocationStock(tx, locationId, productId);
+      stock = lockedStock
+        ? {
+            ...lockedStock,
+            locationId,
+            productId,
+          }
+        : null;
+    } else {
+      const rows = await tx.$queryRaw<
+        Array<{
+          id: string;
+          locationId: string;
+          productId: string;
+          quantity: number;
+          reservedQty: number;
+        }>
+      >(Prisma.sql`
+        SELECT "id", "locationId", "productId", "quantity", "reservedQty"
+        FROM "LocationStock"
+        WHERE "id" = ${locationStockId}
+        FOR UPDATE
+      `);
+
+      stock = rows[0] ?? null;
+    }
 
     if (!stock) {
       return {
@@ -1236,11 +1258,26 @@ export async function correctReservedQtyAction(formData: FormData) {
       },
     });
 
+    await tx.inventoryMovement.create({
+      data: {
+        type: "MANUAL_ADJUSTMENT",
+        productId: stock.productId,
+        locationId: stock.locationId,
+        quantityChange: 0,
+        referenceType: "inventory.reserve_correction",
+        notes: [
+          `Reserve correction: previous=${stock.reservedQty}, new=${newReservedQty}`,
+          `Reason: ${reason}`,
+        ].join("\n"),
+        performedById: user.id,
+      },
+    });
+
     await logAudit(
       {
         userId: user.id,
-        action: "RESERVE_CORRECTION",
-        entity: "LocationStock",
+        action: "inventory.reserve_correction",
+        entity: "location_stock",
         entityId: stock.id,
         details: {
           locationId: stock.locationId,
@@ -1267,8 +1304,7 @@ export async function correctReservedQtyAction(formData: FormData) {
     );
   }
 
-  revalidatePath(reserveCorrectionPath);
-  revalidatePath(`/dashboard/inventory/${result.locationId}`);
+  revalidateInventoryPaths([reserveCorrectionPath, `/dashboard/inventory/${result.locationId}`]);
   redirect(
     withFlashMessage(returnTo, {
       success: "Reserved quantity corrected successfully.",

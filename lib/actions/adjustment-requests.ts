@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { Prisma, ProductStatus } from "@prisma/client";
 import { logAudit } from "@/lib/audit";
 import { requirePermission } from "@/lib/dal/auth";
-import { canAccessLocation } from "@/lib/dal/scope";
 import { withFlashMessage } from "@/lib/flash-toast";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";

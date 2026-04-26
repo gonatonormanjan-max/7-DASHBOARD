@@ -6,6 +6,8 @@ export type PermissionResource =
   | "categories"
   | "locations"
   | "inventory"
+  | "daily_ops"
+  | "issue_reports"
   | "suppliers"
   | "purchase_orders"
   | "sales_orders"
@@ -70,6 +72,8 @@ export const permissionMatrix: Record<
     categories: ALL_ACTIONS,
     locations: ALL_ACTIONS,
     inventory: ALL_ACTIONS,
+    daily_ops: ALL_ACTIONS,
+    issue_reports: ALL_ACTIONS,
     suppliers: ALL_ACTIONS,
     purchase_orders: ALL_ACTIONS,
     sales_orders: ALL_ACTIONS,
@@ -87,6 +91,8 @@ export const permissionMatrix: Record<
     categories: ALL_ACTIONS,
     locations: ALL_ACTIONS,
     inventory: ALL_ACTIONS,
+    daily_ops: ["read", "export"],
+    issue_reports: ["read", "update"],
     suppliers: ALL_ACTIONS,
     purchase_orders: ALL_ACTIONS,
     sales_orders: ALL_ACTIONS,
@@ -107,6 +113,8 @@ export const permissionMatrix: Record<
     categories: ["read"],
     locations: ["read"],
     inventory: ["read", "export"],
+    daily_ops: ["create", "read"],
+    issue_reports: ["create", "read"],
     suppliers: ["read"],
     purchase_orders: ["create", "read", "update"],
     sales_orders: ["create", "read", "update"],
@@ -125,6 +133,7 @@ export const permissionMatrix: Record<
     categories: ["read"],
     locations: ["read"],
     inventory: ["read"],
+    daily_ops: ["create", "read"],
     sales_orders: ["create", "read", "update"],
   },
 };
@@ -168,6 +177,14 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "move",
     section: "Operations",
     resource: "inventory",
+    action: "read",
+  },
+  {
+    title: "Daily Operations",
+    href: "/dashboard/daily-ops",
+    icon: "clipboard",
+    section: "Operations",
+    resource: "daily_ops",
     action: "read",
   },
   {

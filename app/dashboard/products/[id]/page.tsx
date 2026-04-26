@@ -6,6 +6,7 @@ import {
   deleteLocationProductPriceAction,
 } from "@/lib/actions/branch-pricing";
 import { requirePermission } from "@/lib/dal/auth";
+import { getKitComponents } from "@/lib/dal/kits";
 import { getProductById } from "@/lib/dal/products";
 import {
   getBranchPricesForProduct,
@@ -29,10 +30,11 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   const user = await requirePermission("products", "read");
   const { id } = await params;
 
-  const [product, existingPrices, unpricedBranches] = await Promise.all([
+  const [product, existingPrices, unpricedBranches, kitComponents] = await Promise.all([
     getProductById(id),
     getBranchPricesForProduct(id, user),
     getUnpricedBranchesForProduct(id, user),
+    getKitComponents(id),
   ]);
 
   if (!product) {
@@ -41,6 +43,8 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
 
   const canManage = hasPermission(user.role, "products", "update");
   const canManagePricing = hasPermission(user.role, "branch_pricing", "update");
+  const canManageKitComponents = user.role === "ADMIN" || user.role === "SYSTEM_MANAGER";
+  const canDismantleKit = user.role === "ADMIN" || user.role === "MANAGER";
   const productId = product.id;
   const returnTo = `/dashboard/products/${productId}`;
 
@@ -168,6 +172,72 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               </div>
             )}
           </div>
+
+          {kitComponents.length > 0 ? (
+            <div className="border-t border-slate-200 pt-6">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">Kit Components</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Selling this product as a kit uses the kit SKU. Dismantling converts each
+                    kit unit back into the component products below.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {canManageKitComponents ? (
+                    <Link href={`/dashboard/products/${product.id}/kit-components`}>
+                      <Button variant="outline">Manage Kit Components</Button>
+                    </Link>
+                  ) : null}
+                  {canDismantleKit ? (
+                    <Link href={`/dashboard/inventory/dismantle?kitProductId=${product.id}`}>
+                      <Button variant="outline">Dismantle Stock</Button>
+                    </Link>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50/80">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-white/70">
+                    <tr className="text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      <th className="px-4 py-3">Component</th>
+                      <th className="px-4 py-3">SKU</th>
+                      <th className="px-4 py-3">Qty per kit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 text-sm text-slate-700">
+                    {kitComponents.map((component) => (
+                      <tr key={component.id}>
+                        <td className="px-4 py-3 font-medium text-slate-900">
+                          {component.componentProduct.name}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">
+                          {component.componentProduct.sku}
+                        </td>
+                        <td className="px-4 py-3">{component.componentQty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : canManageKitComponents ? (
+            <div className="border-t border-slate-200 pt-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50/80 p-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">Kit Components</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    This product is not currently configured as a kit.
+                  </p>
+                </div>
+                <Link href={`/dashboard/products/${product.id}/kit-components`}>
+                  <Button variant="outline">Manage Kit Components</Button>
+                </Link>
+              </div>
+            </div>
+          ) : null}
 
           {/* Branch-level price overrides — visible to anyone with branch_pricing read */}
           {hasPermission(user.role, "branch_pricing", "read") && (

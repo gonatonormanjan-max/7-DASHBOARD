@@ -80,6 +80,8 @@ export default async function InventoryPage() {
     locationId: user.role === "SALES_STAFF" ? activeLocationId : null,
   });
   const canManage = hasPermission(user.role, "inventory", "update");
+  const canDismantleKit = user.role === "ADMIN" || user.role === "MANAGER";
+  const showQuickActions = canManage || canDismantleKit;
   const warehouses = locationCards.filter((location) => location.type === "WAREHOUSE");
   const branches = locationCards.filter((location) => location.type === "BRANCH");
 
@@ -125,93 +127,138 @@ export default async function InventoryPage() {
           </p>
         </div>
 
-        {canManage ? (
+        {showQuickActions ? (
           <div className="grid gap-4 md:grid-cols-2">
-            <Link
-              className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
-              href="/dashboard/inventory/receive"
-            >
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5ff] text-[#16324b]">
-                  <Truck className="size-5" strokeWidth={2.1} />
-                </span>
-                <div>
-                  <h3 className="font-semibold text-slate-950">Receive from Supplier</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Start warehouse intake from an approved purchase order or record a direct
-                    supplier delivery when no PO exists.
-                  </p>
-                </div>
-              </div>
-            </Link>
+            {canManage && (
+              <>
+                <Link
+                  className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+                  href="/dashboard/inventory/receive"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5ff] text-[#16324b]">
+                      <Truck className="size-5" strokeWidth={2.1} />
+                    </span>
+                    <div>
+                      <h3 className="font-semibold text-slate-950">Receive from Supplier</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Start warehouse intake from an approved purchase order or record a direct
+                        supplier delivery when no PO exists.
+                      </p>
+                    </div>
+                  </div>
+                </Link>
 
-            <Link
-              className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
-              href="/dashboard/inventory/initial-stock"
-            >
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edfff5] text-[#0a4429]">
-                  <Database className="size-5" strokeWidth={2.1} />
-                </span>
-                <div>
-                  <h3 className="font-semibold text-slate-950">Set Opening Balance</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Record the initial stock quantity for a product at a location.
-                  </p>
-                </div>
-              </div>
-            </Link>
+                <Link
+                  className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+                  href="/dashboard/inventory/initial-stock"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edfff5] text-[#0a4429]">
+                      <Database className="size-5" strokeWidth={2.1} />
+                    </span>
+                    <div>
+                      <h3 className="font-semibold text-slate-950">Set Opening Balance</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Record the initial stock quantity for a product at a location.
+                      </p>
+                    </div>
+                  </div>
+                </Link>
 
-            <Link
-              className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
-              href="/dashboard/inventory/adjustment"
-            >
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff4e8] text-[#8a3f00]">
-                  <ClipboardList className="size-5" strokeWidth={2.1} />
-                </span>
-                <div>
-                  <h3 className="font-semibold text-slate-950">Manual Adjustment</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Correct stock counts with a clear reason and auditable notes.
-                  </p>
-                </div>
-              </div>
-            </Link>
+                <Link
+                  className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+                  href="/dashboard/inventory/adjustment"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff4e8] text-[#8a3f00]">
+                      <ClipboardList className="size-5" strokeWidth={2.1} />
+                    </span>
+                    <div>
+                      <h3 className="font-semibold text-slate-950">Manual Adjustment</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Correct stock counts with a clear reason and auditable notes.
+                      </p>
+                    </div>
+                  </div>
+                </Link>
 
-            <Link
-              className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
-              href="/dashboard/inventory/transfer"
-            >
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#eff4ff] text-[#1d3f7a]">
-                  <MoveRight className="size-5" strokeWidth={2.1} />
-                </span>
-                <div>
-                  <h3 className="font-semibold text-slate-950">Stock Transfer</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Move stock between active locations using a dedicated transfer workflow.
-                  </p>
-                </div>
-              </div>
-            </Link>
+                <Link
+                  className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+                  href="/dashboard/inventory/transfer"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#eff4ff] text-[#1d3f7a]">
+                      <MoveRight className="size-5" strokeWidth={2.1} />
+                    </span>
+                    <div>
+                      <h3 className="font-semibold text-slate-950">Stock Transfer</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Move stock between active locations using a dedicated transfer workflow.
+                      </p>
+                    </div>
+                  </div>
+                </Link>
 
-            <Link
-              className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
-              href="/dashboard/inventory/stock-setup"
-            >
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f5f0ff] text-[#3b1f6e]">
-                  <ClipboardList className="size-5" strokeWidth={2.1} />
-                </span>
-                <div>
-                  <h3 className="font-semibold text-slate-950">Stock Setup</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Set stock quantities in bulk for a warehouse or branch - ideal for new locations and migrations.
-                  </p>
+                <Link
+                  className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+                  href="/dashboard/inventory/stock-setup"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f5f0ff] text-[#3b1f6e]">
+                      <ClipboardList className="size-5" strokeWidth={2.1} />
+                    </span>
+                    <div>
+                      <h3 className="font-semibold text-slate-950">Stock Setup</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Set stock quantities in bulk for a warehouse or branch - ideal for new
+                        locations and migrations.
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              </>
+            )}
+
+            {canDismantleKit && (
+              <Link
+                className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+                href="/dashboard/inventory/dismantle"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf8f4] text-[#11664b]">
+                    <MoveRight className="size-5" strokeWidth={2.1} />
+                  </span>
+                  <div>
+                    <h3 className="font-semibold text-slate-950">Dismantle Kit Stock</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Convert bundled kit stock back into component inventory at a branch with a
+                      full audit trail.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            )}
+
+            {(user.role === "ADMIN" || user.role === "SYSTEM_MANAGER") && (
+              <Link
+                className="rounded-lg border border-border bg-card p-6 shadow-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+                href="/dashboard/inventory/reserve-correction"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff4e8] text-[#8a3f00]">
+                    <ClipboardList className="size-5" strokeWidth={2.1} />
+                  </span>
+                  <div>
+                    <h3 className="font-semibold text-slate-950">Reserve Correction</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Review stale reserved quantities against confirmed orders and correct
+                      ghost reservations directly.
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            )}
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-500">
