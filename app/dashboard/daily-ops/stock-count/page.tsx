@@ -85,9 +85,23 @@ export default async function StockCountPage({ searchParams }: StockCountPagePro
           </div>
         </form>
 
-        <p className="mt-4 text-sm text-slate-500">
-          Count date: <strong>{getTodayBusinessDateInput()}</strong>
-        </p>
+        <div className="mt-4 space-y-1 text-sm text-slate-500">
+          <p>
+            Count date: <strong>{getTodayBusinessDateInput()}</strong>
+          </p>
+          <p>
+            Loaded count:{" "}
+            <strong>{selectedType === "OPENING" ? "Opening" : "Closing"}</strong> for{" "}
+            <strong>
+              {selectedBranch.name} ({selectedBranch.code})
+            </strong>
+            .
+          </p>
+          <p>
+            Changing the branch or count type above will not refresh the table until you click
+            Load Count.
+          </p>
+        </div>
       </section>
 
       {countData.lines.length === 0 ? (
@@ -100,6 +114,9 @@ export default async function StockCountPage({ searchParams }: StockCountPagePro
         </div>
       ) : (
         <StockCountForm
+          key={`${countData.location.id}:${selectedType}:${countData.countDate}:${
+            countData.count?.id ?? "new"
+          }`}
           countDate={countData.countDate}
           countId={countData.count?.id}
           lines={countData.lines}

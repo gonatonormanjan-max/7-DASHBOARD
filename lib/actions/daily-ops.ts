@@ -90,35 +90,9 @@ async function upsertStockCountRecord(input: {
       }
 
       const uniqueProductIds = [...new Set(input.lines.map((line) => line.productId))];
-      const stockRows = await tx.locationStock.findMany({
-        where: {
-          locationId: branch.id,
-          productId: {
-            in: uniqueProductIds,
-          },
-          product: {
-            status: {
-              in: ["ACTIVE", "INACTIVE"],
-            },
-          },
-        },
-        select: {
-          productId: true,
-          quantity: true,
-          product: {
-            select: {
-              id: true,
-              name: true,
-              sku: true,
-            },
-          },
-        },
-      });
 
-      const stockByProductId = new Map(stockRows.map((row) => [row.productId, row]));
-
-      if (stockByProductId.size !== uniqueProductIds.length) {
-        throw new Error("One or more products are no longer available for this branch.");
+      if (uniqueProductIds.length !== input.lines.length) {
+        throw new Error("Stock count lines contain duplicate products. Reload the count sheet.");
       }
 
       const countDateValue = toDateOnlyValue(input.countDate);
@@ -133,6 +107,12 @@ async function upsertStockCountRecord(input: {
         select: {
           id: true,
           status: true,
+          lines: {
+            select: {
+              productId: true,
+              systemQty: true,
+            },
+          },
         },
       });
 
@@ -142,6 +122,51 @@ async function upsertStockCountRecord(input: {
 
       if (existingCount?.status === "SUBMITTED") {
         throw new Error("This stock count has already been submitted and can no longer be edited.");
+      }
+
+      const stockRows = existingCount
+        ? []
+        : await tx.locationStock.findMany({
+            where: {
+              locationId: branch.id,
+              productId: {
+                in: uniqueProductIds,
+              },
+              product: {
+                status: {
+                  in: ["ACTIVE", "INACTIVE"],
+                },
+              },
+            },
+            select: {
+              productId: true,
+              quantity: true,
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  sku: true,
+                },
+              },
+            },
+          });
+
+      const stockByProductId = new Map(stockRows.map((row) => [row.productId, row]));
+      const existingLineByProductId = new Map(
+        (existingCount?.lines ?? []).map((line) => [line.productId, line])
+      );
+
+      if (existingCount) {
+        const submittedLineIds = new Set(uniqueProductIds);
+
+        if (
+          existingLineByProductId.size !== submittedLineIds.size ||
+          existingCount.lines.some((line) => !submittedLineIds.has(line.productId))
+        ) {
+          throw new Error("Stock count lines changed. Reload the count sheet and try again.");
+        }
+      } else if (stockByProductId.size !== uniqueProductIds.length) {
+        throw new Error("One or more products are no longer available for this branch.");
       }
 
       const count = existingCount
@@ -175,16 +200,18 @@ async function upsertStockCountRecord(input: {
       });
 
       const lineRecords = input.lines.map((line) => {
+        const existingLine = existingLineByProductId.get(line.productId);
         const stockRow = stockByProductId.get(line.productId);
+        const systemQty = existingLine?.systemQty ?? stockRow?.quantity;
 
-        if (!stockRow) {
+        if (systemQty === undefined) {
           throw new Error("A product in this count is no longer available.");
         }
 
         return {
           stockCountId: count.id,
           productId: line.productId,
-          systemQty: stockRow.quantity,
+          systemQty,
           countedQty: line.countedQty,
           notes: line.notes,
         };

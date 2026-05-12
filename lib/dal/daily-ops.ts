@@ -39,7 +39,7 @@ export async function getTodayStockCount(locationId: string, type: StockCountTyp
   const countDate = getTodayBusinessDateInput();
   const countDateValue = toDateOnlyValue(countDate);
 
-  const [location, existingCount, stockRows] = await Promise.all([
+  const [location, existingCount] = await Promise.all([
     prisma.stockLocation.findFirst({
       where: {
         id: locationId,
@@ -67,32 +67,19 @@ export async function getTodayStockCount(locationId: string, type: StockCountTyp
         countDate: true,
         status: true,
         lines: {
+          orderBy: [{ product: { name: "asc" } }],
           select: {
             productId: true,
+            systemQty: true,
             countedQty: true,
             notes: true,
-          },
-        },
-      },
-    }),
-    prisma.locationStock.findMany({
-      where: {
-        locationId,
-        product: {
-          status: {
-            in: ["ACTIVE", "INACTIVE"],
-          },
-        },
-      },
-      orderBy: [{ product: { name: "asc" } }],
-      select: {
-        productId: true,
-        quantity: true,
-        product: {
-          select: {
-            id: true,
-            name: true,
-            sku: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+              },
+            },
           },
         },
       },
@@ -103,13 +90,52 @@ export async function getTodayStockCount(locationId: string, type: StockCountTyp
     return null;
   }
 
-  const existingLineByProductId = new Map(
-    (existingCount?.lines ?? []).map((line) => [line.productId, line])
-  );
+  if (existingCount) {
+    return {
+      countDate,
+      location,
+      count: {
+        id: existingCount.id,
+        status: existingCount.status,
+        type: existingCount.type,
+      },
+      lines: existingCount.lines.map((line) => ({
+        productId: line.product.id,
+        productName: line.product.name,
+        sku: line.product.sku,
+        systemQty: line.systemQty,
+        countedQty: line.countedQty,
+        discrepancy: line.countedQty - line.systemQty,
+        notes: line.notes ?? "",
+      })),
+    };
+  }
+
+  const stockRows = await prisma.locationStock.findMany({
+    where: {
+      locationId,
+      product: {
+        status: {
+          in: ["ACTIVE", "INACTIVE"],
+        },
+      },
+    },
+    orderBy: [{ product: { name: "asc" } }],
+    select: {
+      productId: true,
+      quantity: true,
+      product: {
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+        },
+      },
+    },
+  });
 
   const lines = stockRows.map((row) => {
-    const existingLine = existingLineByProductId.get(row.productId);
-    const countedQty = existingLine?.countedQty ?? row.quantity;
+    const countedQty = row.quantity;
 
     return {
       productId: row.product.id,
@@ -118,20 +144,14 @@ export async function getTodayStockCount(locationId: string, type: StockCountTyp
       systemQty: row.quantity,
       countedQty,
       discrepancy: countedQty - row.quantity,
-      notes: existingLine?.notes ?? "",
+      notes: "",
     };
   });
 
   return {
     countDate,
     location,
-    count: existingCount
-      ? {
-          id: existingCount.id,
-          status: existingCount.status,
-          type: existingCount.type,
-        }
-      : null,
+    count: null,
     lines,
   };
 }
