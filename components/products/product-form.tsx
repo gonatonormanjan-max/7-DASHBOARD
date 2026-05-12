@@ -8,6 +8,7 @@ import {
   type ProductFormState,
 } from "@/lib/validators/products";
 import { InlineCategoryModal } from "@/components/products/inline-category-modal";
+import { ProductImage } from "@/components/products/product-image";
 import { SubmitButton } from "@/components/ui/submit-button";
 
 type Option = {
@@ -86,6 +87,7 @@ export function ProductForm({
   const [supplierRows, setSupplierRows] = useState<SupplierRow[]>(() =>
     normalizeSupplierRows(existingSuppliers ?? [])
   );
+  const [selectedImageName, setSelectedImageName] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState(
     fieldValue(state, "categoryId", product?.categoryId ?? categories[0]?.id ?? "")
   );
@@ -96,6 +98,8 @@ export function ProductForm({
       .filter((supplierId) => supplierId.length > 0)
   );
   const canAddSupplier = suppliers.length > 0 && selectedSupplierIds.size < suppliers.length;
+  const currentImageUrl = fieldValue(state, "imageUrl", product?.imageUrl);
+  const productImageAlt = fieldValue(state, "name", product?.name) || "Product photo";
 
   function updateSupplierRow(index: number, nextRow: SupplierRow) {
     setSupplierRows((currentRows) =>
@@ -143,7 +147,7 @@ export function ProductForm({
   }
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="space-y-6" encType="multipart/form-data">
       {state.message ? (
         <div className="rounded-2xl bg-[#fff4e4] px-4 py-3 text-sm text-[#8a5610]">
           {state.message}
@@ -472,19 +476,59 @@ export function ProductForm({
           ) : null}
         </label>
 
-        <label className="block space-y-2 lg:col-span-2">
-          <span className="text-sm font-medium text-slate-700">Image URL</span>
-          <input
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
-            defaultValue={fieldValue(state, "imageUrl", product?.imageUrl)}
-            name="imageUrl"
-            placeholder="https://example.com/image.jpg"
-            type="url"
+        <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:col-span-2 sm:grid-cols-[160px_minmax(0,1fr)]">
+          <ProductImage
+            alt={productImageAlt}
+            className="h-40 w-full sm:w-40"
+            src={currentImageUrl}
           />
-          {state.fieldErrors?.imageUrl ? (
-            <p className="text-sm text-destructive">{state.fieldErrors.imageUrl[0]}</p>
-          ) : null}
-        </label>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <h2 className="text-sm font-medium text-slate-700">Product photo</h2>
+              <p className="text-sm text-slate-500">
+                Upload a JPG, PNG, or WebP image up to 4 MB. Product photos are stored in Vercel Blob.
+              </p>
+            </div>
+
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Upload image</span>
+              <input
+                accept="image/jpeg,image/png,image/webp"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200 focus-visible:ring-2 focus-visible:ring-ring/30"
+                name="imageFile"
+                onChange={(event) =>
+                  setSelectedImageName(event.target.files?.[0]?.name ?? "")
+                }
+                type="file"
+              />
+            </label>
+
+            <input name="imageUrl" readOnly type="hidden" value={currentImageUrl} />
+
+            {selectedImageName ? (
+              <p className="text-sm text-slate-500">Selected: {selectedImageName}</p>
+            ) : null}
+
+            {currentImageUrl ? (
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <input
+                  className="h-4 w-4 accent-[var(--ring)]"
+                  name="removeImage"
+                  type="checkbox"
+                  value="true"
+                />
+                Remove current photo without uploading a replacement
+              </label>
+            ) : null}
+
+            {state.fieldErrors?.imageFile ? (
+              <p className="text-sm text-destructive">{state.fieldErrors.imageFile[0]}</p>
+            ) : null}
+            {state.fieldErrors?.imageUrl ? (
+              <p className="text-sm text-destructive">{state.fieldErrors.imageUrl[0]}</p>
+            ) : null}
+          </div>
+        </div>
 
         <label className="block space-y-2 lg:col-span-2">
           <span className="text-sm font-medium text-slate-700">Description</span>

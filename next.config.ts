@@ -8,7 +8,7 @@ const contentSecurityPolicy = [
   // Swap to a nonce-based policy when you're ready to harden further.
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com",
   "font-src 'self'",
   "connect-src 'self'",
   "object-src 'none'",
@@ -53,6 +53,17 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**.public.blob.vercel-storage.com",
+        port: "",
+        pathname: "/**",
+        search: "",
+      },
+    ],
+  },
   async headers() {
     return [
       {

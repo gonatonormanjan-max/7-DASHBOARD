@@ -9,11 +9,22 @@ import {
   MOVING_AVERAGE_VALUATION_METHOD,
 } from "@/lib/costing";
 import { prisma } from "@/lib/prisma";
+import { getPaginationMeta } from "@/lib/pagination";
+import {
+  buildBranchSalesOrderReportRows,
+  type BranchSalesOrderRow,
+  type BranchSalesOrderStatusCount,
+} from "@/lib/reports/branch-sales-orders";
 import {
   computeBranchQuotaRows,
   type BranchQuotaComputedRow,
   type QuotaAttainmentBand,
 } from "@/lib/reports/branch-quotas";
+import { BUSINESS_TIMEZONE, businessDayEnd, businessDayStart } from "@/lib/timezone";
+import {
+  type BranchActivityFilters,
+  type BranchSalesOrdersFilters,
+} from "@/lib/validators/reports";
 
 export const REPORT_OVERVIEW_WINDOW_DAYS = 30;
 export const DEFAULT_ANALYTICS_WINDOW_DAYS = 90;
@@ -84,6 +95,12 @@ type BranchSeries = {
 };
 type ReportsScopeOptions = {
   locationId?: string | null;
+};
+
+export type BranchActivityBranchOption = {
+  id: string;
+  name: string;
+  code: string;
 };
 
 export type QuotaMetric = "revenue" | "units";
@@ -197,6 +214,80 @@ export type BranchQuotaPageData = {
   };
 };
 
+export async function getActiveBranchReportOptions(): Promise<BranchActivityBranchOption[]> {
+  return prisma.stockLocation.findMany({
+    where: {
+      type: "BRANCH",
+      isActive: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+}
+
+export type BranchActivityTrendPoint = {
+  date: string;
+  revenue: number;
+  unitsSold: number;
+  movementVolume: number;
+};
+
+export type BranchActivityRow = {
+  id: string;
+  name: string;
+  code: string;
+  revenue: number;
+  unitsSold: number;
+  orderCount: number;
+  movementCount: number;
+  inboundUnits: number;
+  outboundUnits: number;
+  openingSubmittedDays: number;
+  closingSubmittedDays: number;
+  expectedCountDays: number;
+  discrepancyUnits: number;
+  openIssueCount: number;
+  acknowledgedIssueCount: number;
+  lowOrOutStockCount: number;
+};
+
+export type ReportsBranchActivityData = {
+  filters: BranchActivityFilters;
+  branchOptions: BranchActivityBranchOption[];
+  rows: BranchActivityRow[];
+  dailyTrend: BranchActivityTrendPoint[];
+  summary: {
+    totalRevenue: number;
+    totalUnitsSold: number;
+    salesOrderCount: number;
+    movementCount: number;
+    branchesWithDiscrepancies: number;
+    openIssueCount: number;
+    acknowledgedIssueCount: number;
+    unresolvedIssueCount: number;
+  };
+};
+
+export type ReportsBranchSalesOrdersData = {
+  filters: BranchSalesOrdersFilters;
+  branchOptions: BranchActivityBranchOption[];
+  rows: BranchSalesOrderRow[];
+  pagination: ReturnType<typeof getPaginationMeta>;
+  summary: {
+    filteredSalesValue: number;
+    unitsInFilteredOrders: number;
+    salesOrderRows: number;
+    averageBranchOrderValue: number;
+    statusCounts: BranchSalesOrderStatusCount[];
+  };
+};
+
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -219,6 +310,33 @@ function toDateKey(date: Date) {
 
 function toMonthKey(date: Date) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+}
+
+function dateInputToUtcDate(dateInput: string) {
+  const [year, month, day] = dateInput.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function toBusinessDateKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function buildDateInputRange(dateFrom: string, dateTo: string): string[] {
+  const dates: string[] = [];
+  const current = dateInputToUtcDate(dateFrom);
+  const end = dateInputToUtcDate(dateTo);
+
+  while (current <= end) {
+    dates.push(toDateKey(current));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return dates;
 }
 
 function buildDateRange(startDate: Date): string[] {
@@ -990,6 +1108,476 @@ async function getSeasonalTrends(locationId?: string | null): Promise<BranchSeri
   });
 
   return { data, branches: branches.map((b) => b.name) };
+}
+
+export async function getBranchActivityReportData(
+  filters: BranchActivityFilters
+): Promise<ReportsBranchActivityData> {
+  const dateRange = buildDateInputRange(filters.dateFrom, filters.dateTo);
+  const createdAtRange = {
+    gte: businessDayStart(filters.dateFrom),
+    lt: businessDayEnd(filters.dateTo),
+  };
+  const countDateRange = {
+    gte: dateInputToUtcDate(filters.dateFrom),
+    lte: dateInputToUtcDate(filters.dateTo),
+  };
+
+  const branchOptions = await getActiveBranchReportOptions();
+  const activeBranchIds = new Set(branchOptions.map((branch) => branch.id));
+  const selectedBranchId =
+    filters.branchId && activeBranchIds.has(filters.branchId) ? filters.branchId : null;
+  const branches = selectedBranchId
+    ? branchOptions.filter((branch) => branch.id === selectedBranchId)
+    : branchOptions;
+  const branchIds = branches.map((branch) => branch.id);
+  const effectiveFilters = {
+    ...filters,
+    branchId: selectedBranchId,
+  };
+
+  const dailyTrendByDate = new Map<
+    string,
+    {
+      revenue: number;
+      unitsSold: number;
+      movementVolume: number;
+    }
+  >(
+    dateRange.map((date) => [
+      date,
+      {
+        revenue: 0,
+        unitsSold: 0,
+        movementVolume: 0,
+      },
+    ])
+  );
+
+  const rowByBranchId = new Map<
+    string,
+    BranchActivityRow & {
+      orderIds: Set<string>;
+    }
+  >(
+    branches.map((branch) => [
+      branch.id,
+      {
+        id: branch.id,
+        name: branch.name,
+        code: branch.code,
+        revenue: 0,
+        unitsSold: 0,
+        orderCount: 0,
+        movementCount: 0,
+        inboundUnits: 0,
+        outboundUnits: 0,
+        openingSubmittedDays: 0,
+        closingSubmittedDays: 0,
+        expectedCountDays: dateRange.length,
+        discrepancyUnits: 0,
+        openIssueCount: 0,
+        acknowledgedIssueCount: 0,
+        lowOrOutStockCount: 0,
+        orderIds: new Set<string>(),
+      },
+    ])
+  );
+
+  if (branchIds.length === 0) {
+    return {
+      filters: effectiveFilters,
+      branchOptions,
+      rows: [],
+      dailyTrend: dateRange.map((date) => ({
+        date,
+        revenue: 0,
+        unitsSold: 0,
+        movementVolume: 0,
+      })),
+      summary: {
+        totalRevenue: 0,
+        totalUnitsSold: 0,
+        salesOrderCount: 0,
+        movementCount: 0,
+        branchesWithDiscrepancies: 0,
+        openIssueCount: 0,
+        acknowledgedIssueCount: 0,
+        unresolvedIssueCount: 0,
+      },
+    };
+  }
+
+  const [salesItems, movements, stockCounts, issueReports, stockRows] = await Promise.all([
+    prisma.salesOrderItem.findMany({
+      where: {
+        locationId: {
+          in: branchIds,
+        },
+        salesOrder: {
+          status: getSalesStatusWhere(),
+          createdAt: createdAtRange,
+        },
+      },
+      select: {
+        locationId: true,
+        quantity: true,
+        unitPrice: true,
+        salesOrderId: true,
+        salesOrder: {
+          select: {
+            createdAt: true,
+          },
+        },
+      },
+    }),
+    prisma.inventoryMovement.findMany({
+      where: {
+        locationId: {
+          in: branchIds,
+        },
+        createdAt: createdAtRange,
+      },
+      select: {
+        locationId: true,
+        quantityChange: true,
+        createdAt: true,
+      },
+    }),
+    prisma.stockCount.findMany({
+      where: {
+        locationId: {
+          in: branchIds,
+        },
+        countDate: countDateRange,
+      },
+      select: {
+        locationId: true,
+        type: true,
+        status: true,
+        lines: {
+          select: {
+            systemQty: true,
+            countedQty: true,
+          },
+        },
+      },
+    }),
+    prisma.issueReport.findMany({
+      where: {
+        branchId: {
+          in: branchIds,
+        },
+        createdAt: createdAtRange,
+      },
+      select: {
+        branchId: true,
+        status: true,
+      },
+    }),
+    prisma.locationStock.findMany({
+      where: {
+        locationId: {
+          in: branchIds,
+        },
+        product: {
+          status: "ACTIVE",
+        },
+      },
+      select: {
+        locationId: true,
+        quantity: true,
+        reservedQty: true,
+        reorderLevel: true,
+        product: {
+          select: {
+            reorderLevel: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const summaryOrderIds = new Set<string>();
+
+  for (const item of salesItems) {
+    const row = rowByBranchId.get(item.locationId);
+    const date = toBusinessDateKey(item.salesOrder.createdAt);
+    const trend = dailyTrendByDate.get(date);
+    const lineRevenue = item.quantity * item.unitPrice.toNumber();
+
+    if (row) {
+      row.revenue += lineRevenue;
+      row.unitsSold += item.quantity;
+      row.orderIds.add(item.salesOrderId);
+    }
+
+    if (trend) {
+      trend.revenue += lineRevenue;
+      trend.unitsSold += item.quantity;
+    }
+
+    summaryOrderIds.add(item.salesOrderId);
+  }
+
+  for (const movement of movements) {
+    const row = rowByBranchId.get(movement.locationId);
+    const quantity = Math.abs(movement.quantityChange);
+    const date = toBusinessDateKey(movement.createdAt);
+    const trend = dailyTrendByDate.get(date);
+
+    if (row) {
+      row.movementCount += 1;
+
+      if (movement.quantityChange > 0) {
+        row.inboundUnits += movement.quantityChange;
+      } else {
+        row.outboundUnits += quantity;
+      }
+    }
+
+    if (trend) {
+      trend.movementVolume += quantity;
+    }
+  }
+
+  for (const count of stockCounts) {
+    const row = rowByBranchId.get(count.locationId);
+
+    if (!row || count.status !== "SUBMITTED") {
+      continue;
+    }
+
+    if (count.type === "OPENING") {
+      row.openingSubmittedDays += 1;
+    } else {
+      row.closingSubmittedDays += 1;
+    }
+
+    row.discrepancyUnits += count.lines.reduce(
+      (sum, line) => sum + Math.abs(line.countedQty - line.systemQty),
+      0
+    );
+  }
+
+  for (const issue of issueReports) {
+    const row = rowByBranchId.get(issue.branchId);
+
+    if (!row) {
+      continue;
+    }
+
+    if (issue.status === "OPEN") {
+      row.openIssueCount += 1;
+    } else if (issue.status === "ACKNOWLEDGED") {
+      row.acknowledgedIssueCount += 1;
+    }
+  }
+
+  for (const stock of stockRows) {
+    const row = rowByBranchId.get(stock.locationId);
+
+    if (!row) {
+      continue;
+    }
+
+    const available = stock.quantity - stock.reservedQty;
+    const reorderLevel = stock.reorderLevel ?? stock.product.reorderLevel;
+
+    if (available <= 0 || (reorderLevel > 0 && available <= reorderLevel)) {
+      row.lowOrOutStockCount += 1;
+    }
+  }
+
+  const rows = Array.from(rowByBranchId.values()).map(({ orderIds, ...row }) => ({
+    ...row,
+    revenue: roundCurrency(row.revenue),
+    orderCount: orderIds.size,
+  }));
+  const openIssueCount = rows.reduce((sum, row) => sum + row.openIssueCount, 0);
+  const acknowledgedIssueCount = rows.reduce(
+    (sum, row) => sum + row.acknowledgedIssueCount,
+    0
+  );
+
+  return {
+    filters: effectiveFilters,
+    branchOptions,
+    rows,
+    dailyTrend: dateRange.map((date) => {
+      const trend = dailyTrendByDate.get(date);
+
+      return {
+        date,
+        revenue: roundCurrency(trend?.revenue ?? 0),
+        unitsSold: trend?.unitsSold ?? 0,
+        movementVolume: trend?.movementVolume ?? 0,
+      };
+    }),
+    summary: {
+      totalRevenue: roundCurrency(rows.reduce((sum, row) => sum + row.revenue, 0)),
+      totalUnitsSold: rows.reduce((sum, row) => sum + row.unitsSold, 0),
+      salesOrderCount: summaryOrderIds.size,
+      movementCount: movements.length,
+      branchesWithDiscrepancies: rows.filter((row) => row.discrepancyUnits > 0).length,
+      openIssueCount,
+      acknowledgedIssueCount,
+      unresolvedIssueCount: openIssueCount + acknowledgedIssueCount,
+    },
+  };
+}
+
+export async function getBranchSalesOrdersReportData(
+  filters: BranchSalesOrdersFilters
+): Promise<ReportsBranchSalesOrdersData> {
+  const createdAtRange = {
+    gte: businessDayStart(filters.dateFrom),
+    lt: businessDayEnd(filters.dateTo),
+  };
+
+  const branchOptions = await getActiveBranchReportOptions();
+  const activeBranchIds = new Set(branchOptions.map((branch) => branch.id));
+  const selectedBranchId =
+    filters.branchId && activeBranchIds.has(filters.branchId) ? filters.branchId : null;
+  const branches = selectedBranchId
+    ? branchOptions.filter((branch) => branch.id === selectedBranchId)
+    : branchOptions;
+  const branchIds = branches.map((branch) => branch.id);
+  const effectiveFilters = {
+    ...filters,
+    branchId: selectedBranchId,
+  };
+  const emptyReport = buildBranchSalesOrderReportRows([]);
+
+  if (branchIds.length === 0) {
+    return {
+      filters: effectiveFilters,
+      branchOptions,
+      rows: [],
+      pagination: getPaginationMeta(filters.page, filters.pageSize, 0),
+      summary: emptyReport.summary,
+    };
+  }
+
+  const trimmedQuery = filters.query.trim();
+  const salesOrderWhere: Prisma.SalesOrderWhereInput = {
+    createdAt: createdAtRange,
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(trimmedQuery
+      ? {
+          OR: [
+            {
+              orderNumber: {
+                contains: trimmedQuery,
+                mode: "insensitive",
+              },
+            },
+            {
+              customerName: {
+                contains: trimmedQuery,
+                mode: "insensitive",
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const salesItems = await prisma.salesOrderItem.findMany({
+    where: {
+      locationId: {
+        in: branchIds,
+      },
+      salesOrder: salesOrderWhere,
+    },
+    orderBy: [
+      {
+        salesOrder: {
+          createdAt: "desc",
+        },
+      },
+      {
+        createdAt: "asc",
+      },
+    ],
+    select: {
+      id: true,
+      quantity: true,
+      unitPrice: true,
+      product: {
+        select: {
+          name: true,
+          sku: true,
+        },
+      },
+      location: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      },
+      salesOrder: {
+        select: {
+          id: true,
+          orderNumber: true,
+          customerName: true,
+          status: true,
+          paymentMode: true,
+          createdAt: true,
+          createdBy: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const report = buildBranchSalesOrderReportRows(
+    salesItems.map((item) => {
+      const createdByName = [
+        item.salesOrder.createdBy.firstName,
+        item.salesOrder.createdBy.lastName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+      return {
+        id: item.id,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice.toNumber(),
+        product: item.product,
+        location: item.location,
+        salesOrder: {
+          id: item.salesOrder.id,
+          orderNumber: item.salesOrder.orderNumber,
+          customerName: item.salesOrder.customerName,
+          status: item.salesOrder.status,
+          paymentMode: item.salesOrder.paymentMode,
+          createdAt: item.salesOrder.createdAt.toISOString(),
+          createdByName: createdByName || "Unknown user",
+        },
+      };
+    })
+  );
+  const pagination = getPaginationMeta(
+    filters.page,
+    filters.pageSize,
+    report.rows.length
+  );
+  const start = (pagination.page - 1) * pagination.pageSize;
+
+  return {
+    filters: effectiveFilters,
+    branchOptions,
+    rows: report.rows.slice(start, start + pagination.pageSize),
+    pagination,
+    summary: report.summary,
+  };
 }
 
 export async function getReportsOverviewData(

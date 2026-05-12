@@ -262,6 +262,18 @@ export function hasPermission(
   return permissionMatrix[role]?.[resource]?.includes(action) ?? false;
 }
 
+export function canAccessAllBranchActivityReport(role: Role) {
+  return role === "ADMIN" || role === "SYSTEM_MANAGER";
+}
+
+export function canAccessBranchSalesOrdersReport(role: Role) {
+  return canAccessAllBranchActivityReport(role);
+}
+
+export function canFilterReportsAnalyticsByBranch(role: Role) {
+  return canAccessAllBranchActivityReport(role);
+}
+
 export function getNavItems(role: Role) {
   return NAV_ITEMS.filter((item) => hasPermission(role, item.resource, item.action));
 }

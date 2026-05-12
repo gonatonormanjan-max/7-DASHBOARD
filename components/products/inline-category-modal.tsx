@@ -26,9 +26,15 @@ export function InlineCategoryModal({
 
   useEffect(() => {
     if (state.status === "success" && state.createdCategory) {
-      handleCreatedCategory(state.createdCategory);
+      const timeoutId = window.setTimeout(() => {
+        if (state.createdCategory) {
+          handleCreatedCategory(state.createdCategory);
+        }
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
     }
-  }, [state]);
+  }, [state.status, state.createdCategory]);
 
   const modal = open ? (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">

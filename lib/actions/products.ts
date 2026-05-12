@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { logAudit } from "@/lib/audit";
 import { requirePermission } from "@/lib/dal/auth";
 import { withFlashMessage } from "@/lib/flash-toast";
+import { resolveProductImageUrl } from "@/lib/product-images";
 import { prisma } from "@/lib/prisma";
 import {
   extractProductFormValues,
@@ -378,6 +379,23 @@ export async function createProductAction(
     };
   }
 
+  const productImageResult = await resolveProductImageUrl({
+    formData,
+    currentImageUrl: parsed.data.imageUrl,
+    sku: parsed.data.sku,
+  });
+
+  if (productImageResult.status === "error") {
+    return {
+      status: "error",
+      message: "Please fix the product image.",
+      fieldErrors: {
+        imageFile: [productImageResult.message],
+      },
+      values,
+    };
+  }
+
   const product = await prisma.$transaction(async (tx) => {
     const createdProduct = await tx.product.create({
       data: {
@@ -388,7 +406,7 @@ export async function createProductAction(
         unitPrice: normalizeMoney(parsed.data.unitPrice),
         costPrice: normalizeMoney(parsed.data.costPrice),
         reorderLevel: parsed.data.reorderLevel,
-        imageUrl: parsed.data.imageUrl,
+        imageUrl: productImageResult.imageUrl,
         description: parsed.data.description,
         status: parsed.data.status,
       },
@@ -522,6 +540,23 @@ export async function updateProductAction(
     };
   }
 
+  const productImageResult = await resolveProductImageUrl({
+    formData,
+    currentImageUrl: currentProduct.imageUrl,
+    sku: parsed.data.sku,
+  });
+
+  if (productImageResult.status === "error") {
+    return {
+      status: "error",
+      message: "Please fix the product image.",
+      fieldErrors: {
+        imageFile: [productImageResult.message],
+      },
+      values,
+    };
+  }
+
   const nextValues = {
     name: parsed.data.name,
     sku: parsed.data.sku,
@@ -530,7 +565,7 @@ export async function updateProductAction(
     unitPrice: normalizeMoney(parsed.data.unitPrice),
     costPrice: normalizeMoney(parsed.data.costPrice),
     reorderLevel: parsed.data.reorderLevel,
-    imageUrl: parsed.data.imageUrl,
+    imageUrl: productImageResult.imageUrl,
     description: parsed.data.description,
     status: parsed.data.status,
   };

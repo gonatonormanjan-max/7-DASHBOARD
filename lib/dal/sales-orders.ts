@@ -400,6 +400,7 @@ export async function getSalesOrderFormOptions(options: SalesOrderScopeOptions =
         id: true,
         name: true,
         sku: true,
+        imageUrl: true,
         unitPrice: true,
       },
     }),

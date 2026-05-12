@@ -1,5 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
+  getBranchActivityReportData,
+  getBranchSalesOrdersReportData,
+  getActiveBranchReportOptions,
   DEFAULT_ANALYTICS_WINDOW_DAYS,
   DEFAULT_QUOTA_WINDOW_DAYS,
   REPORT_OVERVIEW_WINDOW_DAYS,
@@ -29,22 +33,47 @@ import { SeasonalTrendsChart } from "@/components/reports/seasonal-trends-chart"
 import { QuotaTracker } from "@/components/reports/quota-tracker";
 import { MetricContextStrip } from "@/components/reports/metric-context-strip";
 import { AnalyticsStatCardsCarousel } from "@/components/reports/analytics-stat-cards-carousel";
+import { BranchActivityFilters } from "@/components/reports/branch-activity-filters";
+import { BranchActivityTable } from "@/components/reports/branch-activity-table";
+import { BranchActivityTrendChart } from "@/components/reports/branch-activity-trend-chart";
+import { BranchSalesOrdersFilters } from "@/components/reports/branch-sales-orders-filters";
+import { BranchSalesOrdersTable } from "@/components/reports/branch-sales-orders-table";
 import { SaveReportsPdfButton } from "@/components/reports/save-reports-pdf-button";
 import { isReportsPdfExportEnabled } from "@/lib/feature-flags";
-import { hasPermission } from "@/lib/permissions";
+import {
+  canAccessAllBranchActivityReport,
+  canAccessBranchSalesOrdersReport,
+  canFilterReportsAnalyticsByBranch,
+  hasPermission,
+} from "@/lib/permissions";
+import {
+  parseBranchActivityFilters,
+  parseBranchSalesOrdersFilters,
+  parseReportsAnalyticsFilters,
+} from "@/lib/validators/reports";
 
 type ReportsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-type ReportView = "overview" | "analytics" | "quota";
+type ReportView =
+  | "overview"
+  | "analytics"
+  | "quota"
+  | "branch-activity"
+  | "branch-sales-orders";
 
 function getSingleParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
 function parseView(value: string | undefined): ReportView {
-  if (value === "analytics" || value === "quota") {
+  if (
+    value === "analytics" ||
+    value === "quota" ||
+    value === "branch-activity" ||
+    value === "branch-sales-orders"
+  ) {
     return value;
   }
 
@@ -91,6 +120,14 @@ function formatPercent(value: number | null) {
   return `${value.toFixed(1)}%`;
 }
 
+function formatStatusLabel(status: string) {
+  return status
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function getDayCardCopy(day: SalesTrendPoint | null, type: "highest" | "lowest") {
   if (!day) {
     return {
@@ -120,6 +157,14 @@ function getHeaderDescription(view: ReportView) {
     return "Check whether each branch is hitting a temporary revenue or unit quota over any day range, without changing stored settings.";
   }
 
+  if (view === "branch-activity") {
+    return "Track daily branch health across sales, stock movement, count completion, discrepancies, and issue reports.";
+  }
+
+  if (view === "branch-sales-orders") {
+    return "Review branch-attributed sales order movement with item-level branch totals and expandable order details.";
+  }
+
   return "Start with the essentials first: revenue, units sold, and the strongest and weakest sales days from the last 30 days.";
 }
 
@@ -140,6 +185,16 @@ function getViewTabs(activeView: ReportView) {
       href: `/dashboard/reports?view=quota&quotaDays=${DEFAULT_QUOTA_WINDOW_DAYS}&quotaMetric=revenue`,
       active: activeView === "quota",
     },
+    {
+      label: "Branch Activity",
+      href: "/dashboard/reports?view=branch-activity",
+      active: activeView === "branch-activity",
+    },
+    {
+      label: "Branch Sales Orders",
+      href: "/dashboard/reports?view=branch-sales-orders",
+      active: activeView === "branch-sales-orders",
+    },
   ];
 }
 
@@ -152,22 +207,188 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     user,
     returnTo: `/dashboard/reports?view=${view}`,
   });
+  const rawBranchFilter = getSingleParam(resolvedSearchParams.branchId);
   const tabs = getViewTabs(view);
   const canManageBranchQuotas = hasPermission(user.role, "reports", "update");
   const headerAction = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <TabToggle tabs={tabs} />
-      {isReportsPdfExportEnabled ? <SaveReportsPdfButton view={view} /> : null}
+      {isReportsPdfExportEnabled &&
+      view !== "branch-activity" &&
+      view !== "branch-sales-orders" &&
+      !(view === "analytics" && rawBranchFilter && rawBranchFilter !== "all") ? (
+        <SaveReportsPdfButton view={view} />
+      ) : null}
     </div>
   );
 
+  if (view === "branch-sales-orders") {
+    if (!canAccessBranchSalesOrdersReport(user.role)) {
+      redirect("/dashboard/reports?view=overview");
+    }
+
+    const filters = parseBranchSalesOrdersFilters(resolvedSearchParams);
+    const report = await getBranchSalesOrdersReportData(filters);
+    const activeBranchLabel = report.filters.branchId
+      ? report.branchOptions.find((branch) => branch.id === report.filters.branchId)?.name ??
+        "Selected branch"
+      : "All active branches";
+    const statusMix = report.summary.statusCounts
+      .filter((statusCount) => statusCount.count > 0)
+      .map((statusCount) => `${formatStatusLabel(statusCount.status)} ${statusCount.count}`)
+      .join(" / ");
+
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          eyebrow="Decision Support"
+          title="Reports"
+          description={getHeaderDescription(view)}
+          action={headerAction}
+        />
+
+        <BranchSalesOrdersFilters
+          branches={report.branchOptions}
+          filters={report.filters}
+        />
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <StatCard
+            label="Filtered sales value"
+            value={formatCurrency(report.summary.filteredSalesValue)}
+            tone="primary"
+            description={`${activeBranchLabel} from ${report.filters.dateFrom} to ${report.filters.dateTo}.`}
+          />
+          <StatCard
+            label="Units in filtered orders"
+            value={formatUnits(report.summary.unitsInFilteredOrders)}
+            tone="success"
+            description="Branch-attributed item quantities in the selected filter."
+          />
+          <StatCard
+            label="Sales order rows"
+            value={formatUnits(report.summary.salesOrderRows)}
+            description="One row means one sales order at one branch."
+          />
+          <StatCard
+            label="Average branch order value"
+            value={formatCurrency(report.summary.averageBranchOrderValue)}
+            description="Filtered sales value divided by branch-order rows."
+          />
+          <StatCard
+            label="Status mix"
+            value={statusMix || "No orders"}
+            tone={report.filters.status ? "warning" : "default"}
+            description={
+              report.filters.status
+                ? `Filtered to ${formatStatusLabel(report.filters.status)}.`
+                : "All sales order statuses are included."
+            }
+          />
+        </section>
+
+        <BranchSalesOrdersTable
+          filters={report.filters}
+          pagination={report.pagination}
+          rows={report.rows}
+        />
+      </div>
+    );
+  }
+
+  if (view === "branch-activity") {
+    if (!canAccessAllBranchActivityReport(user.role)) {
+      redirect("/dashboard/reports?view=overview");
+    }
+
+    const filters = parseBranchActivityFilters(resolvedSearchParams);
+    const activity = await getBranchActivityReportData(filters);
+    const activeBranchLabel = activity.filters.branchId
+      ? activity.branchOptions.find((branch) => branch.id === activity.filters.branchId)?.name ??
+        "Selected branch"
+      : "All active branches";
+
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          eyebrow="Decision Support"
+          title="Reports"
+          description={getHeaderDescription(view)}
+          action={headerAction}
+        />
+
+        <BranchActivityFilters
+          branches={activity.branchOptions}
+          filters={activity.filters}
+        />
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Revenue"
+            value={formatCurrency(activity.summary.totalRevenue)}
+            tone="primary"
+            description={`${activeBranchLabel} from ${activity.filters.dateFrom} to ${activity.filters.dateTo}.`}
+          />
+          <StatCard
+            label="Units sold"
+            value={formatUnits(activity.summary.totalUnitsSold)}
+            tone="success"
+            description={`${activity.summary.salesOrderCount.toLocaleString("en-US")} sales order${activity.summary.salesOrderCount === 1 ? "" : "s"} in the filter.`}
+          />
+          <StatCard
+            label="Stock movements"
+            value={formatUnits(activity.summary.movementCount)}
+            description="Inventory movement entries recorded in the selected window."
+          />
+          <StatCard
+            label="Unresolved issues"
+            value={formatUnits(activity.summary.unresolvedIssueCount)}
+            tone={activity.summary.unresolvedIssueCount > 0 ? "warning" : "success"}
+            description={`${formatUnits(activity.summary.openIssueCount)} open and ${formatUnits(activity.summary.acknowledgedIssueCount)} acknowledged issue reports.`}
+          />
+        </section>
+
+        {activity.summary.branchesWithDiscrepancies > 0 ? (
+          <div className="rounded-lg border border-warning/40 bg-warning/5 px-5 py-4 text-sm text-warning">
+            <strong>{activity.summary.branchesWithDiscrepancies}</strong>{" "}
+            {activity.summary.branchesWithDiscrepancies === 1 ? "branch has" : "branches have"}{" "}
+            stock count discrepancies in this report window.
+          </div>
+        ) : null}
+
+        <BranchActivityTable rows={activity.rows} />
+
+        <BranchActivityTrendChart data={activity.dailyTrend} />
+      </div>
+    );
+  }
+
   if (view === "analytics") {
-    const analyticsDays = parsePositiveInt(
-      getSingleParam(resolvedSearchParams.analyticsDays),
+    const analyticsFilters = parseReportsAnalyticsFilters(
+      resolvedSearchParams,
       DEFAULT_ANALYTICS_WINDOW_DAYS
     );
-    const analytics = await getReportsAnalyticsData(analyticsDays, {
-      locationId: activeLocationId,
+    const canFilterAnalyticsBranches = canFilterReportsAnalyticsByBranch(user.role);
+    const analyticsBranchOptions = canFilterAnalyticsBranches
+      ? await getActiveBranchReportOptions()
+      : [];
+    const selectedAnalyticsBranchId =
+      canFilterAnalyticsBranches &&
+      analyticsFilters.branchId &&
+      analyticsBranchOptions.some((branch) => branch.id === analyticsFilters.branchId)
+        ? analyticsFilters.branchId
+        : null;
+    const analyticsLocationId = canFilterAnalyticsBranches
+      ? selectedAnalyticsBranchId
+      : activeLocationId;
+    const analyticsBranchLabel = selectedAnalyticsBranchId
+      ? analyticsBranchOptions.find((branch) => branch.id === selectedAnalyticsBranchId)?.name ??
+        "Selected branch"
+      : canFilterAnalyticsBranches
+        ? "All active branches"
+        : "Your active branch";
+    const analytics = await getReportsAnalyticsData(analyticsFilters.analyticsDays, {
+      locationId: analyticsLocationId,
     });
     const filteredRevenue = analytics.financialSummary.totalRevenue;
     const filteredUnits = analytics.financialSummary.totalUnitsSold;
@@ -176,7 +397,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         label: `Revenue (${analytics.analyticsDays} days)`,
         value: formatCurrency(filteredRevenue),
         tone: "primary" as const,
-        description: "Combined sales revenue inside the selected analytics window.",
+        description: `${analyticsBranchLabel} sales revenue inside the selected analytics window.`,
       },
       {
         label: `COGS (${analytics.analyticsDays} days)`,
@@ -204,7 +425,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         label: `Units sold (${analytics.analyticsDays} days)`,
         value: formatUnits(filteredUnits),
         tone: "success" as const,
-        description: "All units sold in the selected analytics window, regardless of brand.",
+        description: `${analyticsBranchLabel} units sold in the selected analytics window.`,
       },
       {
         label: "Low / out of stock",
@@ -245,6 +466,26 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             <form action="/dashboard/reports" className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <input name="view" type="hidden" value="analytics" />
 
+              {canFilterAnalyticsBranches ? (
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Branch
+                  </span>
+                  <select
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+                    defaultValue={selectedAnalyticsBranchId ?? "all"}
+                    name="branchId"
+                  >
+                    <option value="all">All active branches</option>
+                    {analyticsBranchOptions.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name} ({branch.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
               <label className="space-y-1">
                 <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Reporting window
@@ -265,6 +506,9 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
               <Button type="submit">Apply filter</Button>
             </form>
           </div>
+          <p className="mt-4 text-sm text-slate-500">
+            Showing analytics for <span className="font-medium text-slate-700">{analyticsBranchLabel}</span>.
+          </p>
         </section>
 
         <MetricContextStrip context={analytics.metricContext} />
@@ -295,8 +539,9 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         <div className="border-t border-slate-200 pt-8">
           <h2 className="text-lg font-semibold text-slate-950">Branch Analytics</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Compare recent branch performance, then use the all-time seasonal view for
-            longer planning context.
+            {selectedAnalyticsBranchId
+              ? "This section is narrowed to the selected branch for focused planning context."
+              : "Compare recent branch performance, then use the all-time seasonal view for longer planning context."}
           </p>
         </div>
 

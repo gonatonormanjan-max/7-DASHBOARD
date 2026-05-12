@@ -34,9 +34,13 @@ export function CashDropModal({ branchId, branchName }: CashDropModalProps) {
 
   useEffect(() => {
     if (state.status === "success") {
-      handleSuccess();
+      const timeoutId = window.setTimeout(() => {
+        handleSuccess();
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
     }
-  }, [state]);
+  }, [state.status]);
 
   const modal = open ? (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">

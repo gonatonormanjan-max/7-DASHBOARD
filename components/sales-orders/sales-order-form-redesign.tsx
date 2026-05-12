@@ -9,6 +9,7 @@ import {
 } from "@/lib/validators/sales-orders";
 import { formatCurrency } from "@/lib/products";
 import { cn } from "@/lib/utils";
+import { ProductImage } from "@/components/products/product-image";
 import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/ui/submit-button";
 
@@ -16,6 +17,7 @@ type ProductOption = {
   id: string;
   name: string;
   sku: string;
+  imageUrl?: string | null;
   unitPrice: string;
 };
 
@@ -376,6 +378,93 @@ function ProductSearchCombobox({
           No products match &ldquo;{query}&rdquo;.
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ProductCatalogGrid({
+  products,
+  stockMap,
+  saleWarehouseId,
+  branchPriceMap,
+  disabled,
+  onSelect,
+}: {
+  products: ProductOption[];
+  stockMap: Map<string, number>;
+  saleWarehouseId: string;
+  branchPriceMap: Record<string, string>;
+  disabled: boolean;
+  onSelect: (product: ProductOption) => void;
+}) {
+  if (products.length === 0) {
+    return (
+      <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-5 text-sm text-slate-500">
+        No active products are available.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 max-h-[28rem] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {products.map((product) => {
+          const availableQty = saleWarehouseId
+            ? stockMap.get(`${product.id}:${saleWarehouseId}`) ?? 0
+            : null;
+          const isOutOfStock = availableQty !== null && availableQty <= 0;
+          const effectivePrice = branchPriceMap[product.id] ?? product.unitPrice;
+
+          return (
+            <button
+              key={product.id}
+              className={cn(
+                "group flex min-h-[16rem] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60",
+                isOutOfStock ? "border-red-100 bg-red-50/40" : ""
+              )}
+              disabled={disabled}
+              onClick={() => onSelect(product)}
+              type="button"
+            >
+              <ProductImage
+                alt={product.name}
+                className="aspect-square w-full rounded-none border-0 border-b border-slate-100"
+                src={product.imageUrl}
+              />
+              <div className="flex flex-1 flex-col gap-2 p-3">
+                <div className="min-h-[3rem]">
+                  <p className="line-clamp-2 text-sm font-semibold text-slate-800">
+                    {product.name}
+                  </p>
+                  <p className="mt-1 truncate text-xs font-medium uppercase tracking-[0.08em] text-slate-400">
+                    {product.sku}
+                  </p>
+                </div>
+                <div className="mt-auto flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {formatCurrency(effectivePrice)}
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-0.5 text-xs",
+                        isOutOfStock ? "font-medium text-red-600" : "text-slate-500"
+                      )}
+                    >
+                      {availableQty === null
+                        ? "Choose branch"
+                        : `${availableQty} available`}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition group-hover:bg-slate-700">
+                    Add
+                  </span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -925,6 +1014,14 @@ export function SalesOrderFormRedesign({
                   onSelect={addProductToCart}
                   placeholder="Search product name or SKU"
                   products={products}
+                />
+                <ProductCatalogGrid
+                  branchPriceMap={branchPriceMap}
+                  disabled={!isReady || !saleWarehouseId}
+                  onSelect={addProductToCart}
+                  products={products}
+                  saleWarehouseId={saleWarehouseId}
+                  stockMap={stockMap}
                 />
               </div>
             ) : (
