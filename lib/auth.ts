@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { resolveAuthSessionMaxAgeSeconds } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
 import { consumeRateLimit } from "@/lib/rate-limit";
 
@@ -27,7 +28,7 @@ function assertRole(value: unknown): Role {
   throw new Error("Authentication token is missing a valid role.");
 }
 
-const AUTH_SESSION_MAX_AGE_SECONDS = 60 * 30; // 30 minutes
+const AUTH_SESSION_MAX_AGE_SECONDS = resolveAuthSessionMaxAgeSeconds();
 
 const LOGIN_RATE_LIMIT = 10;
 const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
