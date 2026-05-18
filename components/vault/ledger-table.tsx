@@ -31,6 +31,16 @@ function referenceLabel(row: VaultLedgerRow) {
       </Link>
     );
   }
+  if (row.referenceType === "cash_out_transaction" && row.referenceId) {
+    return (
+      <Link
+        className="text-[#11664b] underline underline-offset-2 hover:opacity-80"
+        href={`/dashboard/sales-orders/cash-out/${row.referenceId}`}
+      >
+        Cash out
+      </Link>
+    );
+  }
   if (row.referenceType && row.referenceId) {
     return <span className="text-muted-foreground">{row.referenceType}</span>;
   }

@@ -12,6 +12,8 @@ export const VAULT_TRANSACTION_TYPES = [
   VaultTransactionType.CASH_DROP,
   VaultTransactionType.OPENING_FLOAT,
   VaultTransactionType.MANUAL_ADJUSTMENT,
+  VaultTransactionType.CASH_OUT_PAYOUT,
+  VaultTransactionType.CASH_OUT_VOID_REVERSAL,
 ] as const;
 
 export const VAULT_TRANSACTION_TYPE_LABELS: Record<
@@ -24,6 +26,8 @@ export const VAULT_TRANSACTION_TYPE_LABELS: Record<
   [VaultTransactionType.CASH_DROP]: "Cash drop",
   [VaultTransactionType.OPENING_FLOAT]: "Opening float",
   [VaultTransactionType.MANUAL_ADJUSTMENT]: "Manual adjustment",
+  [VaultTransactionType.CASH_OUT_PAYOUT]: "Cash out",
+  [VaultTransactionType.CASH_OUT_VOID_REVERSAL]: "Cash-out reversal",
 };
 
 export const VAULT_PAYMENT_METHODS = [

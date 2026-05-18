@@ -32,6 +32,9 @@ describe("getDedicatedBranchQuotaData storage fallback", () => {
   });
 
   it("uses defaults and marks storage unavailable when settings table is missing", async () => {
+    const recentSaleDate = new Date();
+    recentSaleDate.setDate(recentSaleDate.getDate() - 1);
+
     harness.stockLocationFindMany.mockResolvedValue([
       {
         id: "11111111-1111-4111-8111-111111111111",
@@ -46,7 +49,7 @@ describe("getDedicatedBranchQuotaData storage fallback", () => {
         quantity: 10,
         unitPrice: { toNumber: () => 20 },
         salesOrder: {
-          createdAt: new Date(2026, 3, 15, 10, 0, 0),
+          createdAt: recentSaleDate,
         },
       },
     ]);

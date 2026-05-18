@@ -14,12 +14,14 @@ import {
   type SalesTrendPoint,
 } from "@/lib/dal/reports";
 import { requirePermission, requireSalesStaffActiveLocationId } from "@/lib/dal/auth";
+import { getCashOutListData } from "@/lib/dal/cash-out";
 import { formatCurrency } from "@/lib/products";
-import { formatShortDateMNL } from "@/lib/timezone";
+import { formatDateTimeMNL, formatShortDateMNL } from "@/lib/timezone";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { TabToggle } from "@/components/ui/tab-toggle";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
 import { SalesTrendChart } from "@/components/reports/sales-trend-chart";
 import { RevenueByCategoryChart } from "@/components/reports/revenue-by-category-chart";
 import { TopProductsChart } from "@/components/reports/top-products-chart";
@@ -39,6 +41,7 @@ import { BranchActivityTrendChart } from "@/components/reports/branch-activity-t
 import { BranchSalesOrdersFilters } from "@/components/reports/branch-sales-orders-filters";
 import { BranchSalesOrdersTable } from "@/components/reports/branch-sales-orders-table";
 import { SaveReportsPdfButton } from "@/components/reports/save-reports-pdf-button";
+import { CashOutStatusBadge } from "@/components/cash-out/cash-out-status-badge";
 import { isReportsPdfExportEnabled } from "@/lib/feature-flags";
 import {
   canAccessAllBranchActivityReport,
@@ -51,6 +54,7 @@ import {
   parseBranchSalesOrdersFilters,
   parseReportsAnalyticsFilters,
 } from "@/lib/validators/reports";
+import { parseCashOutListFilters } from "@/lib/validators/cash-out";
 
 type ReportsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -61,7 +65,8 @@ type ReportView =
   | "analytics"
   | "quota"
   | "branch-activity"
-  | "branch-sales-orders";
+  | "branch-sales-orders"
+  | "cash-out-service";
 
 function getSingleParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -72,7 +77,8 @@ function parseView(value: string | undefined): ReportView {
     value === "analytics" ||
     value === "quota" ||
     value === "branch-activity" ||
-    value === "branch-sales-orders"
+    value === "branch-sales-orders" ||
+    value === "cash-out-service"
   ) {
     return value;
   }
@@ -165,6 +171,10 @@ function getHeaderDescription(view: ReportView) {
     return "Review branch-attributed sales order movement with item-level branch totals and expandable order details.";
   }
 
+  if (view === "cash-out-service") {
+    return "Audit non-inventory cash-out service volume, online receipts, and fee revenue separately from product sales.";
+  }
+
   return "Start with the essentials first: revenue, units sold, and the strongest and weakest sales days from the last 30 days.";
 }
 
@@ -195,7 +205,30 @@ function getViewTabs(activeView: ReportView) {
       href: "/dashboard/reports?view=branch-sales-orders",
       active: activeView === "branch-sales-orders",
     },
+    {
+      label: "Cash Out Service",
+      href: "/dashboard/reports?view=cash-out-service",
+      active: activeView === "cash-out-service",
+    },
   ];
+}
+
+function buildCashOutReportQuery(
+  filters: ReturnType<typeof parseCashOutListFilters>
+) {
+  const query: Record<string, string> = {
+    view: "cash-out-service",
+    pageSize: String(filters.pageSize),
+  };
+
+  if (filters.query) query.query = filters.query;
+  if (filters.branchId !== "all") query.branchId = filters.branchId;
+  if (filters.accountId !== "all") query.accountId = filters.accountId;
+  if (filters.status !== "all") query.status = filters.status;
+  if (filters.dateFrom) query.dateFrom = filters.dateFrom;
+  if (filters.dateTo) query.dateTo = filters.dateTo;
+
+  return query;
 }
 
 export default async function ReportsPage({ searchParams }: ReportsPageProps) {
@@ -216,11 +249,262 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
       {isReportsPdfExportEnabled &&
       view !== "branch-activity" &&
       view !== "branch-sales-orders" &&
+      view !== "cash-out-service" &&
       !(view === "analytics" && rawBranchFilter && rawBranchFilter !== "all") ? (
         <SaveReportsPdfButton view={view} />
       ) : null}
     </div>
   );
+
+  if (view === "cash-out-service") {
+    if (!canAccessAllBranchActivityReport(user.role)) {
+      redirect("/dashboard/reports?view=overview");
+    }
+
+    const filters = parseCashOutListFilters(resolvedSearchParams);
+    const report = await getCashOutListData(filters, user);
+    const hasFilters = Boolean(
+      report.filters.query ||
+        report.filters.branchId !== "all" ||
+        report.filters.accountId !== "all" ||
+        report.filters.status !== "all" ||
+        report.filters.dateFrom ||
+        report.filters.dateTo
+    );
+
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          eyebrow="Decision Support"
+          title="Reports"
+          description={getHeaderDescription(view)}
+          action={headerAction}
+        />
+
+        <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">
+                Cash-out service filters
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Service revenue here means cash-out fees only. Product sales
+                revenue and inventory units stay separate.
+              </p>
+            </div>
+            <p className="text-sm text-slate-500">
+              Showing {report.pagination.from}-{report.pagination.to} of{" "}
+              {report.pagination.totalCount} records
+            </p>
+          </div>
+
+          <form
+            action="/dashboard/reports"
+            className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_180px_180px_180px_repeat(2,170px)_auto]"
+          >
+            <input name="view" type="hidden" value="cash-out-service" />
+            <input name="page" type="hidden" value="1" />
+            <input
+              name="pageSize"
+              type="hidden"
+              value={String(report.filters.pageSize)}
+            />
+
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Search</span>
+              <input
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+                defaultValue={report.filters.query}
+                name="query"
+                placeholder="Transaction, reference, customer"
+                type="search"
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Branch</span>
+              <select
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+                defaultValue={report.filters.branchId}
+                name="branchId"
+              >
+                <option value="all">All branches</option>
+                {report.branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Account</span>
+              <select
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+                defaultValue={report.filters.accountId}
+                name="accountId"
+              >
+                <option value="all">All accounts</option>
+                {report.accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Status</span>
+              <select
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+                defaultValue={report.filters.status}
+                name="status"
+              >
+                <option value="all">All statuses</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="VOIDED">Voided</option>
+              </select>
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Date from</span>
+              <input
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+                defaultValue={report.filters.dateFrom ?? ""}
+                name="dateFrom"
+                type="date"
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Date to</span>
+              <input
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-ring/30"
+                defaultValue={report.filters.dateTo ?? ""}
+                name="dateTo"
+                type="date"
+              />
+            </label>
+
+            <div className="flex items-end gap-2">
+              <Button className="flex-1" type="submit">
+                Filter
+              </Button>
+              {hasFilters ? (
+                <Link href="/dashboard/reports?view=cash-out-service">
+                  <Button type="button" variant="outline">
+                    Clear
+                  </Button>
+                </Link>
+              ) : null}
+            </div>
+          </form>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Cash paid out"
+            value={formatCurrency(report.summary.cashPaidOut)}
+            tone="warning"
+            description="Completed cash-out amount deducted from branch cash."
+          />
+          <StatCard
+            label="Online received"
+            value={formatCurrency(report.summary.onlineReceived)}
+            tone="primary"
+            description="Completed online money credited to the shared cash-out service vault."
+          />
+          <StatCard
+            label="Service fee revenue"
+            value={formatCurrency(report.summary.feeRevenue)}
+            tone="success"
+            description="Fees from completed cash-out transactions only."
+          />
+          <StatCard
+            label="Records"
+            value={formatUnits(report.summary.transactionCount)}
+            description={`${formatUnits(report.summary.completedCount)} completed / ${formatUnits(report.summary.voidedCount)} voided.`}
+          />
+        </section>
+
+        <div className="overflow-x-auto rounded-lg border border-border bg-card">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-left">
+              <tr className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                <th className="px-4 py-3 font-medium">Transaction</th>
+                <th className="px-4 py-3 font-medium">Branch</th>
+                <th className="px-4 py-3 font-medium">Account</th>
+                <th className="px-4 py-3 text-right font-medium">Cash out</th>
+                <th className="px-4 py-3 text-right font-medium">Fee</th>
+                <th className="px-4 py-3 text-right font-medium">
+                  Online received
+                </th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.rows.length === 0 ? (
+                <tr>
+                  <td
+                    className="px-4 py-8 text-center text-sm text-muted-foreground"
+                    colSpan={8}
+                  >
+                    No cash-out service records found.
+                  </td>
+                </tr>
+              ) : (
+                report.rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-t border-border align-top transition hover:bg-muted/30"
+                  >
+                    <td className="px-4 py-3">
+                      <Link
+                        className="font-semibold text-primary hover:underline"
+                        href={`/dashboard/sales-orders/cash-out/${row.id}`}
+                      >
+                        {row.transactionNumber}
+                      </Link>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Ref: {row.onlineReferenceNumber}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {row.branchName} ({row.branchCode})
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{row.accountName}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                      {formatCurrency(row.cashOutAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-emerald-700">
+                      {formatCurrency(row.feeAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                      {formatCurrency(row.onlineReceivedAmount)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <CashOutStatusBadge status={row.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                      {formatDateTimeMNL(row.createdAt)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <Pagination
+          basePath="/dashboard/reports"
+          pagination={report.pagination}
+          query={buildCashOutReportQuery(report.filters)}
+          itemLabel="cash-out service records"
+        />
+      </div>
+    );
+  }
 
   if (view === "branch-sales-orders") {
     if (!canAccessBranchSalesOrdersReport(user.role)) {

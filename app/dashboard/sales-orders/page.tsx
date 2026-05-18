@@ -40,11 +40,18 @@ export default async function SalesOrdersPage({
         title="Sales Orders"
         description="Track branch sales from draft through delivery and completion while keeping stock movements tied to the right status change."
         action={
-          canCreate ? (
-            <Link href="/dashboard/sales-orders/create/new">
-              <Button>New Sale</Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Link href="/dashboard/sales-orders/cash-out">
+              <Button type="button" variant="outline">
+                Cash Out Service
+              </Button>
             </Link>
-          ) : null
+            {canCreate ? (
+              <Link href="/dashboard/sales-orders/create/new">
+                <Button type="button">New Sale</Button>
+              </Link>
+            ) : null}
+          </div>
         }
       />
 

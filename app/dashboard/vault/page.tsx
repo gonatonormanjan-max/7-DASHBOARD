@@ -1,4 +1,5 @@
 import { Wallet } from "lucide-react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/dal/auth";
 import { getChangeFundAllocation } from "@/lib/dal/daily-ops";
@@ -10,6 +11,7 @@ import {
 import { parseVaultFilters } from "@/lib/validators/vault";
 import { businessDayEnd, businessDayStart, formatDateTimeMNL } from "@/lib/timezone";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { Pagination } from "@/components/ui/pagination";
 import { VaultFiltersForm } from "@/components/vault/vault-filters";
@@ -118,6 +120,13 @@ export default async function VaultPage({ searchParams }: VaultPageProps) {
                   branchName={selectedBranch.name}
                 />
               </>
+            ) : null}
+            {user.role === "ADMIN" || user.role === "SYSTEM_MANAGER" ? (
+              <Link href="/dashboard/vault/cash-out-service">
+                <Button type="button" variant="outline">
+                  Cash Out Service Vault
+                </Button>
+              </Link>
             ) : null}
             <div className="flex items-center gap-2 rounded-full border border-[#c5e7db] bg-[#edf8f4] px-3 py-1.5">
               <Wallet className="size-4 text-[#11664b]" strokeWidth={2.2} />
